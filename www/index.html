@@ -138,6 +138,8 @@ html[data-theme=noche] input[type=text]{background:#1a201c;color:#ede6d3;-webkit
 html[data-theme=noche] [style*="background:#fff;"],html[data-theme=noche] [style*="background:#fff\""],html[data-theme=noche] [style*="#f2d3ce"],html[data-theme=noche] [style*="#fff3cf"],html[data-theme=noche] [style*="#fff3cc"],html[data-theme=noche] [style*="#ffe0d0"],html[data-theme=noche] [style*="#efe5cc"],html[data-theme=noche] [style*="#e9dec4"],html[data-theme=noche] [style*="#fff8e3"],html[data-theme=noche] [style*="#fff3c4"],html[data-theme=noche] [style*="#fff0b0"],html[data-theme=noche] [style*="#fbe6ee"],html[data-theme=noche] [style*="#fbe4df"],html[data-theme=noche] [style*="#f4e3b0"],html[data-theme=noche] [style*="#f3ecd8"],html[data-theme=noche] [style*="#f3e6ff"],html[data-theme=noche] [style*="#ead9ff"],html[data-theme=noche] [style*="#e6efff"],html[data-theme=noche] [style*="#e6eefb"],html[data-theme=noche] [style*="#e6e0d0"],html[data-theme=noche] [style*="#d8f0d2"],html[data-theme=noche] [style*="#cfe8d6"],html[data-theme=noche] [style*="#fde9e4"],html[data-theme=noche] [style*="#eaf3ea"]{background:#2f382f!important;color:#ede6d3!important}
 html[data-theme=noche] [style*="color:#8c261b"]{color:#f0a595!important}html[data-theme=noche] [style*="color:#1c5a35"],html[data-theme=noche] [style*="color:#1f5a1c"]{color:#9fd6b0!important}html[data-theme=noche] [style*="color:#4a3c20"],html[data-theme=noche] [style*="color:#7a5600"],html[data-theme=noche] [style*="color:#5a4620"],html[data-theme=noche] [style*="color:#9a6a00"],html[data-theme=noche] [style*="color:#6a4a00"]{color:#e6d29a!important}
 main>.sub{color:var(--emp)}
+html[data-theme=noche] .ped td{background:#2a332c;color:#ede6d3;border-color:#3a453d}html[data-theme=noche] .ped .ps{background:#263646}html[data-theme=noche] .ped .pm{background:#43303a}
+html[data-theme=noche] .pos.you,html[data-theme=noche] .rk.you{background:#4a4220;color:#f6e9b0}html[data-theme=noche] .formula{background:#2f382f;color:#ede6d3}
 html[data-theme=atardecer] .badge{background:#ecdcc0}html[data-theme=atardecer] .note{background:#fbf1de}
 </style>
 </head>
@@ -176,7 +178,7 @@ html[data-theme=atardecer] .badge{background:#ecdcc0}html[data-theme=atardecer] 
 const DISTS=[110,220,250,330,350,400,440];
 const BASE_T={110:6.15,220:11.6,250:13.2,330:16.7,350:17.7,400:19.9,440:21.9};
 /* Speed Index: índice de velocidad por carrera (como el de la ACM). Cada caballo conserva su mejor SI. */
-const siOf=(T,D)=>Math.max(0,Math.min(125,Math.round(((1.055-T/BASE_T[D])/0.11*100)*1.08)));
+const siOf=(T,D)=>Math.max(0,Math.min(125,Math.round(((1.09-T/BASE_T[D])/0.11*100)*1.08)));
 function recSI(h,T,D){const v=siOf(T,D);h.siLast=v;if(v>(h.si||0))h.si=v;return v;}
 const siShow=h=>h.si||Math.round(Math.max(40,Math.min(112,(h.speed*0.5+h.start*0.25+h.stamina*0.25)*1.08)));
 /* Laboratorio genético */
@@ -684,7 +686,7 @@ const breederOf=h=>h.br==='me'?G.name:(h.br||(h.sid!=null&&G.stables[h.sid]?G.st
 const nodeOf=x=>({n:x.name,s:x.ped?x.ped.s:null,d:x.ped?x.ped.d:null});
 function trim(n,k){return(!n||k<=0)?null:{n:n.n,s:trim(n.s,k-1),d:trim(n.d,k-1)};}
 function newGame(name,colors){
-  G={kids:{},trophies:[],staff:{T:{id:'T0',s:1},J:{id:'J0',s:1},F:{id:'F0',s:1}},nm2:1,priceIdx:[],tx:[],classics:[],sireW:{},name:name||'Cuadra Los Aztecas',colors:colors||{c1:SW[0],c2:SW[9]},money:50000,week:1,nid:1,rid:1,earnS:0,hall:[],
+  G={siv:2,kids:{},trophies:[],staff:{T:{id:'T0',s:1},J:{id:'J0',s:1},F:{id:'F0',s:1}},nm2:1,priceIdx:[],tx:[],classics:[],sireW:{},name:name||'Cuadra Los Aztecas',colors:colors||{c1:SW[0],c2:SW[9]},money:50000,week:1,nid:1,rid:1,earnS:0,hall:[],
     horses:[],races:[],auction:[],news:[],records:{},stables:[],rivalHorses:[]};
   for(const D of DISTS)G.records[D]=Object.assign({week:0,you:false},SEED_RECORDS[D]);
   G.stables=RIVALS.map(r=>Object.assign({earn:0,wins:0},r));G.rstuds=[];ensureRLabs();
@@ -815,7 +817,7 @@ function genUSALots(){
     if(k==='foal')o.age=Math.floor(rnd(0,7));
     const h=mkHorse(o);
     h.ped={s:fakeSire(),d:fakePed(3,'H')};h.sireName=h.ped.s.n;h.damName=h.ped.d.n;
-    if(h.wins)h.si=Math.round(clamp(rating(h)*1.1+rnd(-2,4),75,114));
+    if(h.wins)h.si=Math.round(clamp(rating(h)*1.1+12+rnd(-2,4),75,118));
     h.lot='usa';h.usaK=kk==='share'?'share':k;if(gp&&kk!=='share')h.usaWin=pick(USA_WINS);
     h.seller=pick(SELLERS_USA);
     h.price=usaPrice(h,k,gp);if(kk==='share'){h.price=Math.max(60000,Math.round(h.price*0.3/5000)*5000);h.usaWin=pick(USA_WINS);}
@@ -1005,7 +1007,7 @@ function snapPrices(){
 function addTx(k,h,p,who){G.tx=G.tx||[];G.tx.unshift({w:G.week,k,n:h.name,p,who:who||null});G.tx=G.tx.slice(0,30);}
 /* Venta: un comprador (cuadra rival) se queda con el caballo */
 function outReg(h,stName,x){
-  G.out=G.out||{};
+  G.out=G.out||{};if(!G.siv){[G.horses,G.rivalHorses,G.auction,G.guests,G.rstuds].forEach(l=>(l||[]).forEach(h=>{if(h.si)h.si=Math.min(125,h.si+34);if(h.siLast)h.siLast=Math.min(125,h.siLast+34);}));G.siv=2;}
   G.out[h.name]=Object.assign({n:h.name,sx:h.sex,st:stName,w0:G.week,s0:curSeason(),bred:h.br==='me'?1:0,r:0,w:0,e:0,gp:0,es:0,ss:curSeason(),log:[],sire:h.sireName||'—',dam:h.damName||'—'},x||{});
   const ks=Object.keys(G.out);if(ks.length>80)ks.sort((a,b)=>G.out[a].w0-G.out[b].w0).slice(0,ks.length-80).forEach(k=>delete G.out[k]);
 }
@@ -1916,7 +1918,7 @@ function drawRace(tau){
   RACE.lt=tau;const rz=0.66;
   {// letrero del hipódromo en la franja de pasto inferior
    ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';const fz=Math.round(W*0.03);ctx.font='bold '+fz+'px sans-serif';
-   const tx='H I P Ó D R O M O   D E   M É X I C O';ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillText(tx,W/2+1,(bot+Hh)/2+2);ctx.fillStyle='#f3e3b0';ctx.fillText(tx,W/2,(bot+Hh)/2+1);ctx.restore();}
+   const tx='H I P Ó D R O M O   S I E R R A   D O R A D A';ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillText(tx,W/2+1,(bot+Hh)/2+2);ctx.fillStyle='#f3e3b0';ctx.fillText(tx,W/2,(bot+Hh)/2+1);ctx.restore();}
   const s=lh/54*rz;
   const order=[...RACE.ents].sort((a,b)=>a.T-b.T);
   // puerta de salida
@@ -2365,8 +2367,8 @@ function linkFoal(s,m,f){const st=G.horses.find(x=>x.id===s.id);if(st&&st.book){
 function chronTxt(r,res){
   if(!res||res.length<2)return null;
   const st=o=>o.stable||(o.you?G.name:((G.stables[o.h.sid]||{}).name||'—'));
-  const a=res[0],b=res[1],c=res[2],L=(b.T-a.T)/0.04,rn=r.name.split(' · ')[0],A=a.h.name,B=b.h.name,S=st(a);
-  const mg=L<0.25?'por la cabeza':L<0.6?'por el hocico':L<1.2?'por un cuello':'por '+Math.max(1,Math.round(L))+' cuerpos';
+  const a=res[0],b=res[1],c=res[2],L=(b.T-a.T)/0.12,rn=r.name.split(' · ')[0],A=a.h.name,B=b.h.name,S=st(a);
+  const mg=L<0.12?'por la nariz':L<0.3?'por una cabeza':L<0.7?'por un cuello':L<1.3?'por un cuerpo':L<10?'por '+Math.round(L)+' cuerpos':'con amplísima ventaja';
   const T=a.T.toFixed(2);
   let t;
   if(L>=4)t=pick([`${A} (${S}) se escapó en la recta del ${rn} y ganó ${mg} con ${T} s. ${B} fue segundo sin poder alcanzarlo.`,`Paseo de ${A} en el ${rn}: cruzó la meta ${mg} por delante de ${B}. Tiempo, ${T} s.`]);
@@ -2595,7 +2597,7 @@ function paperSheet(){
   const feeOf=n=>{const x=studs().concat(STUD_ROSTERS.flat(),LEGENDS).find(q=>q.name===n);const own=G.horses.find(q=>q.name===n&&q.sex==='M'&&q.status==='retired');
     return x?{f:sireCost(x),base:studFee(rating(x),!!x.legend)*1}:own?{f:outFee(own,1),base:Math.round(studFee(rating(own),false)*0.6/50)*50}:null;};
   let s=`<div style="background:#f3ecd8;color:#2a2418;border:2px solid #2a2418;border-radius:6px;padding:12px;font-family:Georgia,'Times New Roman',serif">
-   <div style="text-align:center;border-bottom:3px double #2a2418;padding-bottom:6px"><div style="font:900 26px Georgia,serif;letter-spacing:1px">EL CUARTERO</div><div style="font-size:11px;letter-spacing:2px">DIARIO DEL HIPÓDROMO DE MÉXICO · TEMPORADA ${c} · SEMANA ${((G.week-1)%SEASON_WEEKS)+1}</div></div>
+   <div style="text-align:center;border-bottom:3px double #2a2418;padding-bottom:6px"><div style="font:900 26px Georgia,serif;letter-spacing:1px">EL CUARTERO</div><div style="font-size:11px;letter-spacing:2px">DIARIO DEL HIPÓDROMO SIERRA DORADA · TEMPORADA ${c} · SEMANA ${((G.week-1)%SEASON_WEEKS)+1}</div></div>
    <div style="font:700 15px Georgia,serif;margin:10px 0 4px;border-bottom:1px solid #2a2418">Ganadores de Clásicos</div>`;
   s+=cl.length?cl.slice(0,8).map(x=>`<div style="margin:6px 0;font-size:13px;line-height:1.35"><b>${esc(x.horse)}${x.you?' ⭐':''}</b> se impuso en el <i>${esc(x.race)}</i> (${x.D} yd) con los colores de ${esc(x.stable)}. Hijo de <b>${esc(x.sire)}</b>. <span style="opacity:.6">T${x.s} · S${x.w}</span></div>`).join(''):'<div style="font-size:13px;margin:6px 0">Aún no se corre ningún Clásico esta etapa. Los ganadores aparecerán aquí.</div>';
   s+=`<div style="font:700 15px Georgia,serif;margin:12px 0 4px;border-bottom:1px solid #2a2418">Sementales de moda</div><div style="font-size:12px;opacity:.75;margin-bottom:4px">Cada hijo ganador de Clásico en la temporada sube ~15% la tarifa de su padre; los de la temporada pasada cuentan ~8%. Máximo ×2.</div>`;
