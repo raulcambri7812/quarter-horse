@@ -17,6 +17,15 @@ jobs:
       - run: npm install
       - run: npx cap add android
       - run: npx capacitor-assets generate --android --assetPath assets
+      - name: Splash oscuro con el logo (Android 12+)
+        run: |
+          cp -r android-res/. android/app/src/main/res/
+          python3 - <<'PY'
+          p='android/app/src/main/res/values/styles.xml'
+          s=open(p).read()
+          s=s.replace('<item name="android:background">@drawable/splash</item>','<item name="android:background">@drawable/splash</item>\n        <item name="windowSplashScreenBackground">#0c0c0c</item>\n        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>')
+          open(p,'w').write(s)
+          PY
       - run: npx cap sync android
       - name: Compilar APK (debug)
         working-directory: android

@@ -6,6 +6,12 @@
   "androidScheme": "https"
  },
  "android": {
-  "backgroundColor": "#4f7a5a"
+  "backgroundColor": "#0c0c0c"
+ },
+ "plugins": {
+  "SplashScreen": {
+   "backgroundColor": "#0c0c0c",
+   "launchShowDuration": 0
+  }
  }
 }
