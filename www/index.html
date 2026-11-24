@@ -2721,7 +2721,7 @@ function setupSheet(init){
    ============================================================ */
 const PJ_FX={bic:{inj:1.2,cond:3},est:{inj:1.5,cond:6},ana:{inj:2,cond:10}};
 const PJ_CHARS='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',PJ_PFX='qhsp-';
-const pjNew=()=>({st:'lobby',role:null,code:'',link:null,peer:null,opp:null,oppSel:null,D:220,sel:{hid:null,drugs:[],bet:0,ready:false,alias:''},msg:'',pending:null,t:0});
+const pjNew=()=>({st:'lobby',role:null,code:'',link:null,peer:null,opp:null,oppSel:null,D:220,sel:{hid:null,drugs:[],bet:0,ready:false,alias:''},msg:'',pending:null,t:0,chat:[],ct:[],draft:''});
 let PJ=pjNew();
 const pjRec=()=>{G.pj=G.pj||{w:0,l:0,won:0,lost:0,hist:[]};return G.pj;};
 const pjElig=h=>h.status==='race'&&!h.inj&&!h.sus&&!h.listed&&h.age>=8&&h.cond>=40;
@@ -2855,6 +2855,7 @@ function pjRecv(m){
     if(PJ.role==='host')pjTryGo();
     return;
   }
+  if(m.t==='chat'){chatGot('pjc',PJ,m,()=>UI.tab==='parejeras'&&PJ.st==='room');return;}
   if(m.t==='go'){pjOnGo(m);return;}
   if(m.t==='ack'){
     if(PJ.role!=='host')return;
@@ -2992,6 +2993,40 @@ function pjRefresh(full){
   const a=$('#pjOpp'),b=$('#pjAct');
   if(a)a.innerHTML=pjOppHTML();if(b)b.innerHTML=pjActHTML();
 }
+/* ---------- chat de sala (parejeras y ventas) ---------- */
+const CHAT_QUICK=['¡Buena suerte!','¿Listo?','Un momento','Gracias','¡Buena carrera!'];
+const chatClean=t=>String(t==null?'':t).replace(/[\u0000-\u001f\u007f<>]/g,' ').replace(/\s+/g,' ').trim().slice(0,200);
+function chatLines(S){return S.chat.length?S.chat.map(m=>`<div style="margin:3px 0;word-break:break-word"><b style="color:${m.me?'var(--green,#3f6450)':'#8a6a22'}">${m.me?'Tú':esc(S.opp?S.opp.name:'Rival')}:</b> ${esc(m.t)}</div>`).join(''):'<div class="sub">Aún no hay mensajes. Saluda a tu rival.</div>';}
+function chatBox(id,S){
+  return `<div class="card"><div class="title">💬 Chat de la sala</div><div id="${id}L" style="max-height:150px;overflow:auto;font-size:13px">${chatLines(S)}</div>
+  <input id="${id}I" type="text" maxlength="200" value="${esc(S.draft||'')}" placeholder="Escribe un mensaje" autocomplete="off" enterkeyhint="send" style="margin-top:6px">
+  <button class="btn sm" data-act="${id}send" style="margin-top:6px">Enviar</button>
+  <div class="row" style="gap:5px;flex-wrap:wrap;margin-top:6px">${CHAT_QUICK.map((q,i)=>`<button class="btn sm ghost" style="flex:none;letter-spacing:0;text-transform:none" data-act="${id}q" data-v="${i}">${esc(q)}</button>`).join('')}</div></div>`;
+}
+function chatPaint(id,S){const el=$('#'+id+'L');if(el){el.innerHTML=chatLines(S);el.scrollTop=el.scrollHeight;}}
+function chatSendFrom(id,S,send,text){
+  if(text==null){const e=$('#'+id+'I');text=e?e.value:'';}
+  text=chatClean(text);if(!text)return;
+  S.chat.push({me:true,t:text});if(S.chat.length>60)S.chat.shift();S.draft='';
+  send({t:'chat',m:text});
+  const e=$('#'+id+'I');if(e){e.value='';e.focus();}
+  chatPaint(id,S);
+}
+function chatGot(id,S,m,visible){
+  const text=chatClean(m&&m.m);if(!text)return;
+  const now=Date.now();S.ct=S.ct.filter(x=>now-x<5000);if(S.ct.length>=6)return;S.ct.push(now);
+  S.chat.push({me:false,t:text});if(S.chat.length>60)S.chat.shift();
+  if(visible()&&!RACE)chatPaint(id,S);else toast('💬 '+(S.opp?S.opp.name:'Rival')+': '+text.slice(0,50));
+}
+document.addEventListener('input',e=>{
+  const i=e.target&&e.target.id;
+  if(i==='pjcI')PJ.draft=e.target.value.slice(0,200);else if(i==='svcI')SV.draft=e.target.value.slice(0,200);
+});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter'||!e.target)return;
+  if(e.target.id==='pjcI'){e.preventDefault();chatSendFrom('pjc',PJ,pjSend);}
+  else if(e.target.id==='svcI'){e.preventDefault();chatSendFrom('svc',SV,svSend);}
+});
 function rParejeras(){
   const R=pjRec();
   let h=`<div class="row"><h3>🤝 Parejeras</h3></div>`;
@@ -3047,6 +3082,7 @@ function rParejeras(){
   <div class="sub" style="margin-top:4px">Tienes ${fmt(G.money)}. El ganador se lleva la apuesta del rival.</div>
   <div class="card" id="pjSum" style="margin-top:8px">${pjSumHTML()}</div>
   <div id="pjAct">${pjActHTML()}</div>
+  ${chatBox('pjc',PJ)}
   <button class="btn ghost" data-act="pjleave" style="margin-top:8px">Salir de la sala</button>`;
   return h;
 }
@@ -3057,6 +3093,13 @@ function pjCopy(txt){
 }
 function pjCopy2(txt){
   try{const a=document.createElement('textarea');a.value=txt;a.style.cssText='position:fixed;top:0;left:0;opacity:0';document.body.appendChild(a);a.focus();a.select();const ok=document.execCommand('copy');a.remove();toast(ok?'Código copiado: '+txt:'Código: '+txt+' (mantén presionado para copiar)');}catch(e){toast('Código: '+txt);}
+}
+function chatAct(a,t){
+  const q=CHAT_QUICK[+t.dataset.v];
+  if(a==='pjcsend')chatSendFrom('pjc',PJ,pjSend);
+  else if(a==='pjcq')chatSendFrom('pjc',PJ,pjSend,q);
+  else if(a==='svcsend')chatSendFrom('svc',SV,svSend);
+  else if(a==='svcq')chatSendFrom('svc',SV,svSend,q);
 }
 function pjChanged(){PJ.sel.ready=false;PJ.msg='';pjSendSel();}
 function pjAction(a,t){
@@ -3103,7 +3146,7 @@ document.addEventListener('input',e=>{
    ============================================================ */
 const SV_PFX='qhsv-';
 const SV_KEEP=['name','sex','age','status','cond','wins','races','earn','earnS','rs','best','coat','sireName','damName','ped','br','speed','start','stamina','dist','si','siLast','tw','gl','inj','rest','form','fq','crown','gpW','shoe','sus','known'];
-const svNew=()=>({st:'lobby',role:null,code:'',link:null,peer:null,opp:null,hid:null,price:0,offer:null,msg:'',t:0,id:null,busy:false});
+const svNew=()=>({st:'lobby',role:null,code:'',link:null,peer:null,opp:null,hid:null,price:0,offer:null,msg:'',t:0,id:null,busy:false,chat:[],ct:[],draft:''});
 let SV=svNew();
 const svTxt=v=>String(v==null?'':v).replace(/[<>&"'`]/g,'').slice(0,40);
 function svSan(v,d){
@@ -3193,6 +3236,7 @@ function svJoin(code){
 }
 function svRecv(m){
   if(!m||typeof m!=='object')return;
+  if(m.t==='chat'&&SV.opp){chatGot('svc',SV,m,()=>UI.tab==='mercado'&&UI.mtab==='usr'&&(SV.st==='view'||SV.st==='buying'||SV.st==='lock'));return;}
   /* ---- vendedor ---- */
   if(SV.role==='host'){
     if(m.t==='hi'){
@@ -3299,7 +3343,7 @@ function rEntre(){
     return h+`<button class="btn ghost" data-act="svleave">Cancelar sala</button>`;
   }
   if(SV.st==='view'&&SV.role==='host'){
-    return h+`<div class="note">🔎 <b>${esc(SV.opp.name)}</b> está viendo la ficha de ${hs?esc(hs.name):'tu caballo'} (precio ${fmt(SV.price)}). Si decide comprar, la venta se hace sola.</div>${SV.msg?`<div class="note">${esc(SV.msg)}</div>`:''}<button class="btn ghost" data-act="svleave">Cerrar sala</button>`;
+    return h+`<div class="note">🔎 <b>${esc(SV.opp.name)}</b> está viendo la ficha de ${hs?esc(hs.name):'tu caballo'} (precio ${fmt(SV.price)}). Si decide comprar, la venta se hace sola.</div>${SV.msg?`<div class="note">${esc(SV.msg)}</div>`:''}${chatBox('svc',SV)}<button class="btn ghost" data-act="svleave">Cerrar sala</button>`;
   }
   if(SV.st==='lock'){
     return h+`<div class="note">⏳ Completando la venta con <b>${esc(SV.opp?SV.opp.name:'el comprador')}</b>… no cierres el juego.</div>${SV.msg?`<div class="note">${esc(SV.msg)}</div>`:''}`;
@@ -3313,7 +3357,7 @@ function rEntre(){
     ${poor?'<div class="sub" style="color:#8c261b;margin-top:4px">No te alcanza el dinero.</div>':''}${full?`<div class="sub" style="color:#8c261b;margin-top:4px">Tu cuadra ya tiene ${MAXRACERS} corredores.</div>`:''}
     ${SV.msg?`<div class="note" style="margin-top:6px">${esc(SV.msg)}</div>`:''}
     <button class="btn gold" data-act="svbuy" style="margin-top:8px" ${(poor||full||SV.st==='buying')?'disabled':''}>${SV.st==='buying'?'Esperando al vendedor…':'Comprar por '+fmt(o.price)}</button>
-    <button class="btn ghost" data-act="svleave">Salir sin comprar</button></div>`;
+    <button class="btn ghost" data-act="svleave">Salir sin comprar</button></div>${chatBox('svc',SV)}`;
     return h;
   }
   if(SV.st==='bought'||SV.st==='sold')return h+`<div class="note">✅ Operación terminada.</div><button class="btn gold" data-act="svleave">Volver</button>`;
@@ -3355,6 +3399,7 @@ document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t)return;
   const a=t.dataset.act,id=t.dataset.id,v=t.dataset.v;
   switch(a){
+    case 'pjcsend':case 'pjcq':case 'svcsend':case 'svcq':chatAct(a,t);break;
     case 'svsel':case 'svhost':case 'svjoin':case 'svleave':case 'svbuy':case 'svshare':case 'svcopy':case 'svpaste':case 'svpay':case 'svcancelp':svAction(a,t);break;
     case 'pjenter':case 'pjd0':case 'pjhost':case 'pjjoin':case 'pjleave':case 'pjdist':case 'pjhorse':case 'pjdrug':case 'pjbet':case 'pjready':case 'pjshare':case 'pjcopy':case 'pjpaste':pjAction(a,t);break;
     case 'tab':UI.tab=v;render();break;
