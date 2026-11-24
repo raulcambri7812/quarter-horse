@@ -2791,7 +2791,7 @@ function pjHost(){
       my.peer=peer;
       peer.on('open',()=>{if(PJ!==my)return;my.code=code;my.msg='';render();});
       peer.on('connection',c=>{if(PJ!==my)return;if(my.link){try{c.close();}catch(e){}return;}c.on('open',()=>{if(PJ===my)pjWrap(c);});});
-      peer.on('error',e=>{if(PJ!==my)return;if(e&&e.type==='unavailable-id'&&tries++<4){try{peer.destroy();}catch(x){}open();return;}if(my.st==='wait'&&!my.code){pjDestroy();PJ.msg='No se pudo crear la sala. Revisa tu internet.';render();}});
+      peer.on('error',e=>{if(PJ!==my)return;if(e&&e.type==='unavailable-id'&&tries++<4){try{peer.destroy();}catch(x){}open();return;}if(my.st==='wait'&&!my.code){const ty=e&&e.type?e.type:'desconocido';pjDestroy();PJ.msg='No se pudo crear la sala (error: '+ty+'). Si abriste el juego dentro de Claude, ábrelo desde el enlace de Netlify o instala el APK; si ya lo hiciste, revisa tu internet y vuelve a intentar.';render();}});
       peer.on('disconnected',()=>{try{peer.reconnect();}catch(e){}});
     };open();
   });
@@ -2815,7 +2815,7 @@ function pjJoin(code){
     my.peer=peer;
     my.t=setTimeout(()=>{if(PJ===my&&my.st==='join'){pjDestroy();PJ.msg='No se encontró la sala '+code+'. Revisa el código.';render();}},15000);
     peer.on('open',()=>{if(PJ!==my)return;const c=peer.connect(PJ_PFX+code,{reliable:true});c.on('open',()=>{if(PJ===my)pjWrap(c);});c.on('error',()=>{if(PJ===my)pjLost();});});
-    peer.on('error',e=>{if(PJ!==my)return;pjDestroy();PJ.msg=e&&e.type==='peer-unavailable'?'No se encontró la sala '+code+'. Revisa el código.':'No se pudo conectar.';render();});
+    peer.on('error',e=>{if(PJ!==my)return;pjDestroy();PJ.msg=e&&e.type==='peer-unavailable'?'No se encontró la sala '+code+'. Revisa el código.':'No se pudo conectar (error: '+(e&&e.type?e.type:'desconocido')+'). Revisa tu internet.';render();});
   });
 }
 function pjRecv(m){
