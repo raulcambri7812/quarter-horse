@@ -1454,7 +1454,8 @@ function predictionHTML(){
   return h;
 }
 function rMercado(){
-  let h=`<div class="seg"><button class="${UI.mtab==='sub'?'on':''}" data-act="mtab" data-v="sub">🇲🇽 Subasta MX</button><button class="${UI.mtab==='studs'?'on':''}" data-act="mtab" data-v="studs">Sementales</button><button class="${UI.mtab==='cuad'?'on':''}" data-act="mtab" data-v="cuad">Cuadras</button><button class="${UI.mtab==='leg'?'on':''}" data-act="mtab" data-v="leg">🧬 Genética</button></div>`;
+  let h=`<div class="seg"><button class="${UI.mtab==='sub'?'on':''}" data-act="mtab" data-v="sub">🇲🇽 Subasta MX</button><button class="${UI.mtab==='studs'?'on':''}" data-act="mtab" data-v="studs">Sementales</button><button class="${UI.mtab==='cuad'?'on':''}" data-act="mtab" data-v="cuad">Cuadras</button><button class="${UI.mtab==='leg'?'on':''}" data-act="mtab" data-v="leg">🧬 Genética</button><button class="${UI.mtab==='usr'?'on':''}" data-act="mtab" data-v="usr">🤝 Entre usuarios</button></div>`;
+  if(UI.mtab==='usr')return h+rEntre();
   if(UI.mtab==='sub'){
     h+='<div class="note"><b>Subasta Sierra Dorada MX</b> · Subasta semanal: corredores, yeguas de cría, sementales y potros recién nacidos. Cambia cada semana; pagas un 15% sobre el valor de mercado (sementales y potros llevan su propio precio). También puedes subastar tus caballos desde la Cuadra.</div>';
     if(G.auction.some(a=>a.lot==='fut'))h+=`<div class="note" style="background:#fff3cf">🏁 <b>Subasta de potros sin correr</b> (hasta la semana ${FUT.AUCEND}). Quien compre uno lo nomina al <b>${FUT.NAME}</b>: ${FUT.D} yd, bolsa ${fmt(FUT.PURSE)}, semana ${FUT.RACE}, máximo 10 corredores. Para correrlo debe haber ganado al menos una carrera.</div>`;
@@ -2769,17 +2770,20 @@ function pjWrap(conn){
   const my=PJ;PJ.link={send:x=>conn.send(x),close:()=>{try{conn.close();}catch(e){}}};
   conn.on('data',d=>{try{pjRecv(typeof d==='string'?JSON.parse(d):d);}catch(e){}});
   conn.on('close',()=>{if(PJ===my)pjLost();});conn.on('error',()=>{if(PJ===my)pjLost();});
-  pjSend({t:'hi',v:1,name:G.name,c1:G.colors.c1,c2:G.colors.c2});
+  pjSend({t:'hi',v:1,name:G.name,c1:G.colors.c1,c2:G.colors.c2,info:PJ.role==='host'?{D:PJ.D,bet:PJ.sel.bet}:undefined});
 }
 function pjLost(){
   const was=PJ.st;if(was==='lobby')return;
+  if(PJ.role==='host'&&was==='wait'&&PJ.opp){PJ.opp=null;PJ.link=null;PJ.msg='';if(UI.tab==='parejeras')render();return;}
   const racing=RACE&&RACE.pj&&!RACE.done;
-  pjDestroy();PJ.msg=was==='room'?'Tu rival se desconectó.':'No se pudo conectar.';
+  pjDestroy();PJ.msg=was==='room'?'Tu rival se desconectó.':was==='preview'?'La sala se cerró.':'No se pudo conectar.';
   if(!racing&&UI.tab==='parejeras')render();else if(was==='room')toast('Tu rival se desconectó');
 }
 function pjHost(){
   if(PJ.st!=='lobby')return;
-  PJ=pjNew();PJ.st='wait';PJ.role='host';PJ.msg='Preparando sala…';render();
+  if(PJ.sel.bet>G.money){toast('La apuesta de la sala es mayor que tu dinero');return;}
+  const keep={D:PJ.D,bet:PJ.sel.bet};
+  PJ=pjNew();PJ.D=keep.D;PJ.sel.bet=keep.bet;PJ.st='wait';PJ.role='host';PJ.msg='Preparando sala…';render();
   const my=PJ;
   pjLoadLib(ok=>{
     if(PJ!==my)return;
@@ -2822,13 +2826,21 @@ function pjRecv(m){
   if(!m||typeof m!=='object')return;
   if(m.t==='hi'){
     if(PJ.opp)return;
-    PJ.opp={name:pjClean(m.name)||'Rival',c1:pjCol(m.c1),c2:pjCol(m.c2)};PJ.st='room';clearTimeout(PJ.t);PJ.msg='';
-    if(PJ.role==='host'){pjSend({t:'cfg',D:PJ.D});}
-    pjSendSel();
-    if(UI.tab==='parejeras')render();else toast('🤝 '+PJ.opp.name+' se unió a la parejera');
+    PJ.opp={name:pjClean(m.name)||'Rival',c1:pjCol(m.c1),c2:pjCol(m.c2)};clearTimeout(PJ.t);PJ.msg='';
+    if(PJ.role==='guest'){
+      const i=m.info||{};PJ.prev={D:DISTS.includes(+i.D)?+i.D:220,bet:Math.round(pjNum(i.bet,0,1e12,0))};PJ.st='preview';render();
+    }else{
+      if(UI.tab==='parejeras')render();else toast('🔎 '+PJ.opp.name+' está viendo tu sala');
+    }
     return;
   }
   if(!PJ.opp)return;
+  if(m.t==='enter'){
+    if(PJ.role!=='host'||PJ.st!=='wait')return;
+    PJ.st='room';pjSend({t:'cfg',D:PJ.D});pjSendSel();
+    if(UI.tab==='parejeras')render();else toast('🤝 '+PJ.opp.name+' entró a la parejera');
+    return;
+  }
   if(m.t==='cfg'){
     if(PJ.role!=='guest'||!DISTS.includes(+m.D))return;
     if(PJ.D!==+m.D){PJ.D=+m.D;PJ.sel.ready=false;pjSendSel();}
@@ -2986,7 +2998,13 @@ function rParejeras(){
   if(PJ.st==='lobby'){
     h+=`<div class="note">Carreras <b>no oficiales</b> de uno contra uno con otro jugador conectado. Cada quien decide cuánto apuesta y <b>el ganador se lleva la apuesta del rival</b>. Aquí se permiten sustancias prohibidas (cuestan dinero, desgastan y suben el riesgo de lesión). No cuentan para récords, temporada ni estadísticas.</div>
     ${PJ.msg?`<div class="note" style="background:#fbe4df;border-color:#b23a2e">${esc(PJ.msg)}</div>`:''}
-    <button class="btn gold" data-act="pjhost">🏁 Crear sala</button>
+    <div class="card"><div class="title">Tu sala</div>
+      <div class="sub" style="margin-top:4px">Distancia</div>
+      <div class="seg" style="flex-wrap:wrap">${DISTS.map(d=>`<button class="${PJ.D===d?'on':''}" data-act="pjd0" data-v="${d}">${d}</button>`).join('')}</div>
+      <div class="sub" style="margin-top:8px">Apuesta de la sala (tu rival la verá antes de entrar)</div>
+      <input id="pjBet0" type="text" inputmode="numeric" value="${PJ.sel.bet||''}" placeholder="$0" style="margin-top:4px">
+      <div class="sub" style="margin-top:4px">Tienes ${fmt(G.money)}.</div>
+      <button class="btn gold" data-act="pjhost" style="margin-top:8px">🏁 Crear sala</button></div>
     <div class="card" style="margin-top:10px"><div class="title">Unirme a la sala de un amigo</div>
       <input id="pjCode" type="text" placeholder="Pega o escribe el código" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" style="text-transform:uppercase;margin-top:6px;-webkit-user-select:text;user-select:text"><div class="row" style="gap:6px;margin-top:6px"><button class="btn ghost" style="flex:1" data-act="pjpaste">📋 Pegar</button><button class="btn" style="flex:2" data-act="pjjoin">Unirme</button></div></div>
     <div class="card"><div class="title">Tu historial de parejeras</div><div class="sub">Ganadas <b>${R.w}</b> · Perdidas <b>${R.l}</b> · Ganado ${fmt(R.won)} · Perdido ${fmt(R.lost)}</div>
@@ -2996,7 +3014,18 @@ function rParejeras(){
   if(PJ.st==='wait'){
     h+=PJ.code?`<div class="card" style="text-align:center"><div class="sub">Código de tu sala</div><div data-act="pjcopy" style="font:700 44px 'Oswald',sans-serif;letter-spacing:.18em;margin:6px 0;-webkit-user-select:text;user-select:text">${PJ.code}</div><div class="sub">Pásaselo a tu rival. Cuando entre, empieza la parejera.</div>
     <div class="row" style="gap:6px;margin-top:8px"><button class="btn gold" style="flex:1" data-act="pjshare">📤 Compartir</button><button class="btn ghost" style="flex:1" data-act="pjcopy">📋 Copiar</button></div></div>`:`<div class="note">${esc(PJ.msg||'Preparando sala…')}</div>`;
+    if(PJ.code)h+=`<div class="card"><div class="sub">📋 Datos de tu sala: <b>${PJ.D} yd</b> · apuesta <b>${fmt(PJ.sel.bet)}</b></div>${PJ.opp?`<div class="sub" style="margin-top:4px">🔎 <b>${esc(PJ.opp.name)}</b> está viendo tu sala…</div>`:''}</div>`;
     return h+`<button class="btn ghost" data-act="pjleave">Cancelar</button>`;
+  }
+  if(PJ.st==='preview'){
+    const o=PJ.opp,pv=PJ.prev;
+    return h+`<div class="card"><div class="row">${silk(o.c1,o.c2)}<div class="h">${esc(o.name)}</div></div>
+      <div class="kv"><span>Distancia</span><b>${pv.D} yd</b></div>
+      <div class="kv"><span>Apuesta de la sala</span><b>${fmt(pv.bet)}</b></div>
+      <div class="kv"><span>Tu dinero</span><b>${fmt(G.money)}</b></div>
+      <div class="sub" style="margin-top:6px">Al entrar tú decides cuánto apuestas y con qué caballo corres. El ganador se lleva la apuesta del rival.</div>
+      ${pv.bet>G.money?`<div class="note" style="margin-top:6px;background:#fbe4df;border-color:#b23a2e">Esa apuesta es mayor que tu dinero. Puedes entrar y poner una apuesta menor.</div>`:''}
+      <button class="btn gold" data-act="pjenter" style="margin-top:8px">✅ Entrar a la sala</button><button class="btn ghost" data-act="pjleave">Salir</button></div>`;
   }
   if(PJ.st==='join')return h+`<div class="note">${esc(PJ.msg||'Conectando…')}</div><button class="btn ghost" data-act="pjleave">Cancelar</button>`;
   /* sala */
@@ -3035,6 +3064,11 @@ function pjAction(a,t){
   if(PJ.pending&&a!=='pjleave'){toast('Iniciando la carrera…');return;}
   switch(a){
     case 'pjhost':pjHost();break;
+    case 'pjd0':{if(PJ.st==='lobby'&&DISTS.includes(+v)){PJ.D=+v;render();}break;}
+    case 'pjenter':{
+      if(PJ.st!=='preview')break;
+      PJ.st='room';PJ.D=PJ.prev.D;PJ.sel.bet=Math.min(PJ.prev.bet,Math.max(0,Math.floor(G.money)));PJ.sel.ready=false;
+      pjSend({t:'enter'});pjSendSel();render();break;}
     case 'pjjoin':{const e=$('#pjCode');pjJoin(e?e.value:'');break;}
     case 'pjleave':{const was=PJ.st;pjDestroy();if(was==='room')toast('Saliste de la sala');render();break;}
     case 'pjdist':{if(PJ.role!=='host'||!DISTS.includes(+v))break;PJ.D=+v;pjSend({t:'cfg',D:PJ.D});pjChanged();render();break;}
@@ -3053,6 +3087,7 @@ function pjAction(a,t){
   }
 }
 document.addEventListener('input',e=>{
+  if(e.target&&e.target.id==='pjBet0'){PJ.sel.bet=Math.min(1e12,Math.max(0,parseInt(String(e.target.value).replace(/\D/g,''),10)||0));return;}
   if(e.target&&e.target.id==='pjAlias'&&!PJ.pending){PJ.sel.alias=pjClean(e.target.value).slice(0,20);PJ.sel.ready=false;PJ.msg='';pjSendSel();const b=$('#pjAct');if(b)b.innerHTML=pjActHTML();return;}
   if(!e.target||e.target.id!=='pjBet'||PJ.pending)return;
   const n=Math.max(0,parseInt(String(e.target.value).replace(/\D/g,''),10)||0);
@@ -3062,13 +3097,266 @@ document.addEventListener('input',e=>{
 
 
 /* ============================================================
+   VENTA ENTRE USUARIOS · sala por código (conexión directa, sin servidor propio)
+   Vendedor crea la sala con su caballo y precio; el comprador ve la ficha completa y compra.
+   Transferencia en dos pasos: el vendedor reserva el caballo, el comprador lo recibe y paga, el vendedor cobra y lo entrega.
+   ============================================================ */
+const SV_PFX='qhsv-';
+const SV_KEEP=['name','sex','age','status','cond','wins','races','earn','earnS','rs','best','coat','sireName','damName','ped','br','speed','start','stamina','dist','si','siLast','tw','gl','inj','rest','form','fq','crown','gpW','shoe','sus','known'];
+const svNew=()=>({st:'lobby',role:null,code:'',link:null,peer:null,opp:null,hid:null,price:0,offer:null,msg:'',t:0,id:null,busy:false});
+let SV=svNew();
+const svTxt=v=>String(v==null?'':v).replace(/[<>&"'`]/g,'').slice(0,40);
+function svSan(v,d){
+  d=d||0;if(d>7)return null;
+  if(v==null)return null;
+  if(typeof v==='number')return isFinite(v)?v:0;
+  if(typeof v==='boolean')return v;
+  if(typeof v==='string')return svTxt(v);
+  if(Array.isArray(v))return v.slice(0,40).map(x=>svSan(x,d+1));
+  if(typeof v==='object'){const o={};let n=0;for(const k of Object.keys(v)){if(n++>40)break;if(!/^[A-Za-z0-9_]{1,12}$/.test(k)||k==='constructor'||k==='prototype')continue;o[k]=svSan(v[k],d+1);}return o;}
+  return null;
+}
+function svSnapshot(h){const o={};for(const k of SV_KEEP)if(h[k]!==undefined)o[k]=JSON.parse(JSON.stringify(h[k]));if(o.br==='me')o.br=G.name;return o;}
+function svClean(raw){
+  if(!raw||typeof raw!=='object')return null;
+  const s=svSan(raw,0),o={};
+  for(const k of SV_KEEP)if(s[k]!==undefined&&s[k]!==null)o[k]=s[k];
+  if(!o.name||typeof o.name!=='string'||!o.name.trim())return null;
+  o.sex=o.sex==='H'?'H':'M';o.coat=COAT_HEX[o.coat]?o.coat:'alazán';o.status=o.status==='retired'?'retired':'race';
+  const n=(k,a,b,d)=>{o[k]=Math.round(pjNum(o[k],a,b,d));};
+  n('age',0,700,100);n('speed',1,120,50);n('start',1,120,50);n('stamina',1,120,50);n('wins',0,999,0);n('races',0,999,0);n('rs',0,99,0);n('rest',0,60,0);
+  o.cond=pjNum(o.cond,0,100,100);o.earn=pjNum(o.earn,0,1e11,0);o.earnS=pjNum(o.earnS,0,1e11,0);
+  o.dist=DISTS.includes(+o.dist)?+o.dist:220;
+  if(o.si!=null)n('si',0,125,0);if(o.siLast!=null)n('siLast',0,125,0);
+  o.sireName=svTxt(o.sireName)||'—';o.damName=svTxt(o.damName)||'—';if(o.br!=null)o.br=svTxt(o.br);
+  if(o.inj&&(typeof o.inj!=='object'||!o.inj.wk&&o.inj.wk!==0))delete o.inj;
+  if(o.gl&&!Array.isArray(o.gl))delete o.gl;
+  return o;
+}
+function svEligible(h){return h&&!h.preg&&!h.syn&&!h.listed&&!h.legend&&!(G.svPending&&G.svPending.hid===h.id);}
+function svSend(o){try{if(SV.link)SV.link.send(JSON.stringify(o));}catch(e){}}
+function svRender(){if(UI.tab==='mercado'&&UI.mtab==='usr'&&!RACE)render();}
+function svDestroy(){const l=SV.link,p=SV.peer;clearTimeout(SV.t);SV=svNew();try{if(l)l.close();}catch(e){}try{if(p)p.destroy();}catch(e){}}
+function svWrap(conn){
+  const my=SV;SV.link={send:x=>conn.send(x),close:()=>{try{conn.close();}catch(e){}}};
+  conn.on('data',d=>{try{svRecv(typeof d==='string'?JSON.parse(d):d);}catch(e){}});
+  conn.on('close',()=>{if(SV===my)svLost();});conn.on('error',()=>{if(SV===my)svLost();});
+  svSend({t:'hi',v:1,name:G.name,c1:G.colors.c1,c2:G.colors.c2});
+}
+function svLost(){
+  const was=SV.st;if(was==='lobby'||was==='sold')return;
+  if(SV.role==='host'&&(was==='wait'||was==='view')){SV.opp=null;SV.link=null;SV.id=null;SV.st='wait';svRender();return;}
+  if(SV.role==='host'&&was==='lock'){const pr=SV.peer;clearTimeout(SV.t);SV=svNew();SV.msg='Se perdió la conexión antes de confirmar. Revisa la venta pendiente.';try{if(pr)pr.destroy();}catch(e){}svRender();return;}
+  const bought=SV.st==='bought';
+  svDestroy();if(!bought)SV.msg=was==='view'||was==='buying'?'Se cerró la sala del vendedor.':'No se pudo conectar.';svRender();
+}
+function svOpen(onOpen){
+  const my=SV;
+  pjLoadLib(ok=>{
+    if(SV!==my)return;
+    if(!ok){svDestroy();SV.msg='No se pudo cargar la conexión. Revisa tu internet.';svRender();return;}
+    onOpen(my);
+  });
+}
+function svHost(){
+  if(SV.st!=='lobby')return;
+  const h=H(SV.hid);
+  if(!svEligible(h)){toast('Elige un caballo que se pueda vender (sin preñez, subasta ni sindicato)');return;}
+  const price=Math.round(pjNum(SV.price,0,1e12,0));
+  const keep={hid:SV.hid,price};
+  SV=svNew();SV.hid=keep.hid;SV.price=keep.price;SV.st='wait';SV.role='host';SV.msg='Preparando sala…';svRender();
+  svOpen(my=>{
+    let tries=0;
+    const open=()=>{
+      let code='';for(let i=0;i<5;i++)code+=PJ_CHARS[Math.floor(Math.random()*PJ_CHARS.length)];
+      let peer;try{peer=new window.Peer(SV_PFX+code);}catch(e){svDestroy();SV.msg='No se pudo crear la sala.';svRender();return;}
+      my.peer=peer;
+      peer.on('open',()=>{if(SV!==my)return;my.code=code;my.msg='';svRender();});
+      peer.on('connection',c=>{if(SV!==my)return;if(my.link){try{c.close();}catch(e){}return;}c.on('open',()=>{if(SV===my)svWrap(c);});});
+      peer.on('error',e=>{if(SV!==my)return;if(e&&e.type==='unavailable-id'&&tries++<4){try{peer.destroy();}catch(x){}open();return;}if(my.st==='wait'&&!my.code){const ty=e&&e.type?e.type:'desconocido';svDestroy();SV.msg='No se pudo crear la sala (error: '+ty+'). Revisa tu internet y vuelve a intentar.';svRender();}});
+      peer.on('disconnected',()=>{try{peer.reconnect();}catch(e){}});
+    };open();
+  });
+}
+function svJoin(code){
+  code=pjExtract(code);
+  if(SV.st!=='lobby')return;
+  if(code.length!==5){toast('El código tiene 5 letras o números');return;}
+  SV=svNew();SV.st='join';SV.role='guest';SV.code=code;SV.msg='Conectando…';svRender();
+  svOpen(my=>{
+    let peer;try{peer=new window.Peer();}catch(e){svDestroy();SV.msg='No se pudo conectar.';svRender();return;}
+    my.peer=peer;
+    my.t=setTimeout(()=>{if(SV===my&&my.st==='join'){svDestroy();SV.msg='No se encontró la sala '+code+'. Revisa el código.';svRender();}},15000);
+    peer.on('open',()=>{if(SV!==my)return;const c=peer.connect(SV_PFX+code,{reliable:true});c.on('open',()=>{if(SV===my)svWrap(c);});c.on('error',()=>{if(SV===my)svLost();});});
+    peer.on('error',e=>{if(SV!==my)return;svDestroy();SV.msg=e&&e.type==='peer-unavailable'?'No se encontró la sala '+code+'. Revisa el código.':'No se pudo conectar (error: '+(e&&e.type?e.type:'desconocido')+').';svRender();});
+  });
+}
+function svRecv(m){
+  if(!m||typeof m!=='object')return;
+  /* ---- vendedor ---- */
+  if(SV.role==='host'){
+    if(m.t==='hi'){
+      if(SV.opp||SV.st!=='wait')return;
+      const h=H(SV.hid);if(!svEligible(h)){svSend({t:'no',m:'El caballo ya no está disponible.'});return;}
+      SV.opp={name:pjClean(m.name)||'Comprador',c1:pjCol(m.c1),c2:pjCol(m.c2)};SV.st='view';SV.id=Date.now()+'-'+Math.floor(Math.random()*1e6);
+      svSend({t:'offer',id:SV.id,price:SV.price,seller:{name:G.name,c1:G.colors.c1,c2:G.colors.c2},horse:svSnapshot(h)});
+      if(UI.tab==='mercado'&&UI.mtab==='usr')render();else toast('🔎 '+SV.opp.name+' está viendo tu caballo en venta');
+      return;
+    }
+    if(m.t==='buy'&&SV.st==='view'&&m.id===SV.id){
+      if(G.svPending){svSend({t:'no',id:SV.id,m:'Hay una venta pendiente de este caballo.'});return;}
+      const h=H(SV.hid);
+      if(!svEligible(h)||RACE){svSend({t:'no',id:SV.id,m:'El caballo ya no está disponible.'});return;}
+      G.svPending={id:SV.id,hid:h.id,name:h.name,price:SV.price,buyer:SV.opp.name,w:G.week};save();
+      SV.st='lock';svSend({t:'ok',id:SV.id,price:SV.price,horse:svSnapshot(h)});
+      clearTimeout(SV.t);SV.t=setTimeout(()=>{if(SV.st==='lock'){SV.st='view';SV.msg='El comprador no confirmó a tiempo. Revisa la venta pendiente.';svRender();}},20000);
+      svRender();return;
+    }
+    if(m.t==='cancel'&&SV.st==='lock'&&m.id===SV.id){clearTimeout(SV.t);G.svPending=null;save();SV.st='view';SV.msg='El comprador canceló la compra.';svRender();return;}
+    if(m.t==='got'&&SV.st==='lock'&&m.id===SV.id){clearTimeout(SV.t);svFinishSale();svSend({t:'done',id:m.id});return;}
+    return;
+  }
+  /* ---- comprador ---- */
+  if(m.t==='offer'){
+    if(SV.st!=='join')return;
+    const horse=svClean(m.horse),price=Math.round(pjNum(m.price,0,1e12,-1)),sl=m.seller||{};
+    if(!horse||price<0){svDestroy();SV.msg='La oferta no es válida.';svRender();return;}
+    clearTimeout(SV.t);SV.opp={name:pjClean(sl.name)||'Vendedor',c1:pjCol(sl.c1),c2:pjCol(sl.c2)};
+    SV.offer={id:String(m.id).slice(0,40),price,horse};SV.st='view';SV.msg='';svRender();return;
+  }
+  if(m.t==='no'&&SV.st==='join'){svDestroy();SV.msg=pjClean(m.m)||'El vendedor canceló.';svRender();return;}
+  if(m.t==='no'){SV.busy=false;SV.msg=pjClean(m.m)||'El vendedor canceló.';if(SV.st==='buying')SV.st='view';svRender();return;}
+  if(m.t==='ok'&&SV.st==='buying'&&SV.offer&&m.id===SV.offer.id){
+    const o=SV.offer,horse=svClean(m.horse);
+    const bad=!horse||horse.name!==o.horse.name||horse.sex!==o.horse.sex||Math.round(pjNum(m.price,0,1e12,-1))!==o.price||G.money<o.price||(horse.status==='race'&&racersN()>=MAXRACERS);
+    if(bad){svSend({t:'cancel',id:o.id});SV.st='view';SV.busy=false;SV.msg='No se pudo completar: revisa tu dinero y el cupo de corredores.';svRender();return;}
+    svCommit(horse,o.price,SV.opp.name);
+    svSend({t:'got',id:o.id});
+    SV.st='bought';SV.msg='';svRender();
+    openSheet(`<h3>¡Compra cerrada!</h3><div class="card"><div class="h">${esc(horse.name)}</div><div class="kv"><span>Vendedor</span><b>${silk(SV.opp.c1,SV.opp.c2)} ${esc(SV.opp.name)}</b></div><div class="kv"><span>Pagaste</span><b>−${fmt(o.price)}</b></div></div><div class="sub">Ya está en tu cuadra.</div><button class="btn gold" data-act="close">Listo</button>`);
+    return;
+  }
+  if(m.t==='done'){return;}
+}
+function svCommit(snap,price,from){
+  const o=Object.assign({},snap,{sireId:null,damId:null});
+  let nm=o.name,k=1;while(G.horses.some(x=>x.name===nm)){k++;nm=o.name.slice(0,24)+' '+['','II','III','IV','V','VI','VII','VIII','IX','X'][Math.min(k-1,9)];}
+  o.name=nm;
+  const nh=mkHorse(o);G.horses.push(nh);G.money-=price;addTx('Compra a otro jugador',nh,-price,from);save();return nh;
+}
+function svFinishSale(){
+  const p=G.svPending;if(!p)return;
+  const h=H(p.hid);
+  G.money+=p.price;if(h)addTx('Venta a otro jugador',h,p.price,p.buyer);
+  G.horses=G.horses.filter(x=>x.id!==p.hid);if(UI.mare===p.hid)UI.mare=null;if(UI.sire===p.hid)UI.sire=null;
+  G.svPending=null;save();
+  SV.st='sold';SV.msg='';svRender();
+  openSheet(`<h3>¡Venta cerrada!</h3><div class="card"><div class="h">${esc(p.name)}</div><div class="kv"><span>Comprador</span><b>${esc(p.buyer)}</b></div><div class="kv"><span>Cobraste</span><b>+${fmt(p.price)}</b></div></div><button class="btn gold" data-act="close">Listo</button>`);
+}
+function svCard(h){
+  const vals=DISTS.map(D=>peff(h,D,100)),mx=Math.max(...vals);
+  let inj='';try{const t=injOf(h);if(t)inj=`<div class="note" style="margin-top:8px">🩹 <b>${esc(t.name)}</b> · gravedad ${SEV[t.sev]} · recuperación: <b>${h.inj.wk} semana${h.inj.wk===1?'':'s'}</b></div>`;}catch(e){}
+  return `<div class="row"><span class="dot" style="background:${COAT_HEX[h.coat]}"></span><h3>${esc(h.name)}</h3><span class="sub">${h.sex==='H'?'Yegua':'Macho'}</span><span class="sp"></span>${status(h)}</div>
+  <div class="sub" style="margin:4px 0 6px">${ageText(h)} · Capa ${h.coat} · ${idealTxt(h)}</div>
+  ${statBars(h)}${bar('Condición',h.cond,'c')}${formLine(h)}${h.gl&&h.gl.length?`<div class="sub" style="margin-top:4px">🧬 Línea genética: <b>${h.gl.map(esc).join(', ')}</b></div>`:''}
+  <div class="title" style="color:var(--muted)">Rating por distancia</div>
+  <div class="apt">${DISTS.map((d,i)=>{const hid=distHidden(h)&&!(h.best&&h.best[d]);return `<div><span>${hid?'?':Math.round(vals[i])}</span><b style="height:${hid?8:Math.max(8,(vals[i]/mx)*100*0.62)}%;${hid?'opacity:.25':''}"></b>${d}</div>`;}).join('')}</div>
+  <div class="title" style="color:var(--muted)">Mejores tiempos</div>
+  <div class="bt">${DISTS.map(d=>`<div><span>${h.best&&h.best[d]?(+h.best[d]).toFixed(2):'—'}</span>${d}</div>`).join('')}</div>
+  <div class="title" style="color:var(--muted)">Árbol genealógico</div>${pedHTML(h)}
+  <div class="title" style="color:var(--muted)">Historial y linaje</div>
+  <div class="kv"><span>Carreras / victorias (total)</span><b>${h.races} / ${h.wins}</b></div>
+  <div class="kv"><span>Ganancias de toda su carrera</span><b>${fmt(h.earn)}</b></div>
+  <div class="kv"><span>Criador</span><b>${esc(breederOf(h))}</b></div>
+  <div class="kv"><span>Padre</span><b>${esc(h.sireName)}</b></div>
+  <div class="kv"><span>Madre</span><b>${esc(h.damName)}</b></div>
+  <div class="kv"><span>Victorias: Clásicos / Allowance / Maiden</span><b>${h.tw?h.tw.gp||0:0} / ${h.tw?h.tw.clasico||0:0} / ${h.tw?h.tw.cond||0:0}</b></div>
+  <div class="kv"><span>Speed Index (mejor)</span><b>${h.si?h.si+' <small>· última '+(h.siLast||h.si)+'</small>':'sin correr'}</b></div>
+  <div class="kv"><span>Valor de mercado</span><b>${fmt(horseValue(h))}</b></div>${inj}`;
+}
+function rEntre(){
+  let h='';
+  const P=G.svPending;
+  if(P)h+=`<div class="note" style="background:#fff3cf;border-color:#c9a227"><b>⚠ Venta sin confirmar:</b> ${esc(P.name)} por ${fmt(P.price)} a ${esc(P.buyer)}. Si el comprador ya lo recibió, cobra y entrégalo; si no, cancela.<div class="row" style="gap:6px;margin-top:6px"><button class="btn sm gold" style="flex:1" data-act="svpay">Ya lo recibió: cobrar</button><button class="btn sm ghost" style="flex:1" data-act="svcancelp">Cancelar venta</button></div></div>`;
+  if(SV.st==='lobby'){
+    const els=G.horses.filter(svEligible);
+    h+=`<div class="note">Vende o compra caballos, yeguas y sementales con otro jugador. Se hace por una <b>sala con código</b>: el vendedor elige el caballo y el precio, el comprador ve la <b>ficha completa</b> antes de pagar. Caballo, récords y árbol genealógico pasan al comprador. No se puede vender una yegua preñada, un caballo en subasta o uno sindicalizado.</div>
+    ${SV.msg?`<div class="note" style="background:#fbe4df;border-color:#b23a2e">${esc(SV.msg)}</div>`:''}
+    <div class="card"><div class="title">Vender un caballo</div>
+    ${els.length?els.map(x=>`<div class="card tap" data-act="svsel" data-id="${x.id}" style="${SV.hid===x.id?'outline:2px solid var(--gold)':''}"><div class="row"><span class="dot" style="background:${COAT_HEX[x.coat]}"></span><div class="h">${esc(x.name)}</div><span class="sp"></span><span class="sub">${x.sex==='H'?'♀':'♂'} · Valor ${fmt(horseValue(x))}</span></div></div>`).join(''):'<div class="sub">No tienes caballos que se puedan vender.</div>'}
+    <div class="sub" style="margin-top:8px">Precio</div><input id="svPrice" type="text" inputmode="numeric" value="${SV.price||''}" placeholder="$0" style="margin-top:4px">
+    <button class="btn gold" data-act="svhost" style="margin-top:8px" ${SV.hid?'':'disabled'}>🏁 Crear sala de venta</button></div>
+    <div class="card"><div class="title">Comprar a otro jugador</div>
+    <input id="svCode" type="text" placeholder="Pega o escribe el código" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" style="text-transform:uppercase;margin-top:6px;-webkit-user-select:text;user-select:text">
+    <div class="row" style="gap:6px;margin-top:6px"><button class="btn ghost" style="flex:1" data-act="svpaste">📋 Pegar</button><button class="btn" style="flex:2" data-act="svjoin">Ver caballo</button></div></div>`;
+    return h;
+  }
+  const hs=SV.hid&&H(SV.hid);
+  if(SV.st==='wait'){
+    h+=SV.code?`<div class="card" style="text-align:center"><div class="sub">Código de tu sala de venta</div><div data-act="svcopy" style="font:700 44px 'Oswald',sans-serif;letter-spacing:.18em;margin:6px 0;-webkit-user-select:text;user-select:text">${SV.code}</div>
+      <div class="sub">${hs?esc(hs.name):''} · precio <b>${fmt(SV.price)}</b></div>${SV.opp?`<div class="sub" style="margin-top:4px">🔎 <b>${esc(SV.opp.name)}</b> está viendo el caballo…</div>`:'<div class="sub" style="margin-top:4px">Pásale el código al comprador.</div>'}
+      <div class="row" style="gap:6px;margin-top:8px"><button class="btn gold" style="flex:1" data-act="svshare">📤 Compartir</button><button class="btn ghost" style="flex:1" data-act="svcopy">📋 Copiar</button></div></div>`:`<div class="note">${esc(SV.msg||'Preparando sala…')}</div>`;
+    return h+`<button class="btn ghost" data-act="svleave">Cancelar sala</button>`;
+  }
+  if(SV.st==='view'&&SV.role==='host'){
+    return h+`<div class="note">🔎 <b>${esc(SV.opp.name)}</b> está viendo la ficha de ${hs?esc(hs.name):'tu caballo'} (precio ${fmt(SV.price)}). Si decide comprar, la venta se hace sola.</div>${SV.msg?`<div class="note">${esc(SV.msg)}</div>`:''}<button class="btn ghost" data-act="svleave">Cerrar sala</button>`;
+  }
+  if(SV.st==='lock'){
+    return h+`<div class="note">⏳ Completando la venta con <b>${esc(SV.opp?SV.opp.name:'el comprador')}</b>… no cierres el juego.</div>${SV.msg?`<div class="note">${esc(SV.msg)}</div>`:''}`;
+  }
+  if(SV.st==='join')return h+`<div class="note">${esc(SV.msg||'Conectando…')}</div><button class="btn ghost" data-act="svleave">Cancelar</button>`;
+  if(SV.st==='view'||SV.st==='buying'){
+    const o=SV.offer,full=o.horse.status==='race'&&racersN()>=MAXRACERS,poor=G.money<o.price;
+    h+=`<div class="card"><div class="row">${silk(SV.opp.c1,SV.opp.c2)}<div class="h">${esc(SV.opp.name)}</div><span class="sp"></span><span class="sub">vende</span></div></div>
+    <div class="card">${svCard(o.horse)}</div>
+    <div class="card"><div class="kv"><span>Precio</span><b>${fmt(o.price)}</b></div><div class="kv"><span>Tu dinero</span><b>${fmt(G.money)}</b></div>
+    ${poor?'<div class="sub" style="color:#8c261b;margin-top:4px">No te alcanza el dinero.</div>':''}${full?`<div class="sub" style="color:#8c261b;margin-top:4px">Tu cuadra ya tiene ${MAXRACERS} corredores.</div>`:''}
+    ${SV.msg?`<div class="note" style="margin-top:6px">${esc(SV.msg)}</div>`:''}
+    <button class="btn gold" data-act="svbuy" style="margin-top:8px" ${(poor||full||SV.st==='buying')?'disabled':''}>${SV.st==='buying'?'Esperando al vendedor…':'Comprar por '+fmt(o.price)}</button>
+    <button class="btn ghost" data-act="svleave">Salir sin comprar</button></div>`;
+    return h;
+  }
+  if(SV.st==='bought'||SV.st==='sold')return h+`<div class="note">✅ Operación terminada.</div><button class="btn gold" data-act="svleave">Volver</button>`;
+  return h;
+}
+function svAction(a,t){
+  const id=t.dataset.id;
+  switch(a){
+    case 'svsel':{if(SV.st!=='lobby')break;SV.hid=id;const x=H(id);if(x)SV.price=Math.round(horseValue(x));render();break;}
+    case 'svhost':svHost();break;
+    case 'svjoin':{const e=$('#svCode');svJoin(e?e.value:'');break;}
+    case 'svleave':{if(SV.st==='lock'){toast('Espera a que termine la venta');break;}svDestroy();render();break;}
+    case 'svbuy':{
+      if(SV.st!=='view'||!SV.offer)break;
+      const o=SV.offer;if(G.money<o.price){toast('No te alcanza el dinero');break;}
+      if(o.horse.status==='race'&&racersN()>=MAXRACERS){toast('Tu cuadra ya tiene '+MAXRACERS+' corredores');break;}
+      SV.st='buying';SV.msg='';svSend({t:'buy',id:o.id});
+      clearTimeout(SV.t);SV.t=setTimeout(()=>{if(SV.st==='buying'){SV.st='view';SV.msg='El vendedor no respondió. Intenta de nuevo.';svRender();}},20000);
+      render();break;}
+    case 'svshare':{const tx='Te vendo un caballo en Quarter Horse Simulator. Código de sala: '+SV.code;try{if(navigator.share){navigator.share({text:tx});break;}}catch(e){}pjCopy(SV.code);break;}
+    case 'svcopy':pjCopy(SV.code);break;
+    case 'svpaste':{
+      const put=x=>{const e=$('#svCode');if(e){e.value=pjExtract(x);e.focus();}};
+      try{navigator.clipboard.readText().then(x=>{if(x)put(x);else toast('No hay nada copiado');}).catch(()=>toast('Mantén presionado el campo y elige Pegar'));}catch(e){toast('Mantén presionado el campo y elige Pegar');}break;}
+    case 'svpay':{if(G.svPending){svFinishSale();}break;}
+    case 'svcancelp':{G.svPending=null;save();toast('Venta cancelada');render();break;}
+  }
+}
+document.addEventListener('input',e=>{
+  if(e.target&&e.target.id==='svPrice')SV.price=Math.min(1e12,Math.max(0,parseInt(String(e.target.value).replace(/\D/g,''),10)||0));
+});
+setTimeout(()=>{try{if(typeof G!=='undefined'&&G&&G.svPending)toast('Tienes una venta entre usuarios sin confirmar (Mercado → Entre usuarios)');}catch(e){}},3500);
+
+
+/* ============================================================
    EVENTOS
    ============================================================ */
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t)return;
   const a=t.dataset.act,id=t.dataset.id,v=t.dataset.v;
   switch(a){
-    case 'pjhost':case 'pjjoin':case 'pjleave':case 'pjdist':case 'pjhorse':case 'pjdrug':case 'pjbet':case 'pjready':case 'pjshare':case 'pjcopy':case 'pjpaste':pjAction(a,t);break;
+    case 'svsel':case 'svhost':case 'svjoin':case 'svleave':case 'svbuy':case 'svshare':case 'svcopy':case 'svpaste':case 'svpay':case 'svcancelp':svAction(a,t);break;
+    case 'pjenter':case 'pjd0':case 'pjhost':case 'pjjoin':case 'pjleave':case 'pjdist':case 'pjhorse':case 'pjdrug':case 'pjbet':case 'pjready':case 'pjshare':case 'pjcopy':case 'pjpaste':pjAction(a,t);break;
     case 'tab':UI.tab=v;render();break;
     case 'ranchname':{const n=(($('#ranchn')&&$('#ranchn').value)||'').trim();if(n){G.ranch=n.slice(0,26);save();render();toast('Nombre del rancho guardado');}break;}
     case 'close':if(t.classList.contains('sheet-bg')&&SETUP.first&&!SETUP.done)break;closeSheet();break;
@@ -3182,11 +3470,11 @@ document.addEventListener('click',e=>{
     case 'rename':{const n=($('#rn').value||'').trim();if(n){H(id).name=n;save();render();showHorse(id);toast('Nombre guardado');}break;}
     case 'retire':{const h=H(id);openSheet(`<h3>¿Retirar a ${esc(h.name)}?</h3><p class="sub">Dejará de competir para siempre y pasará a ${h.sex==='H'?'ser yegua de cría':'ser semental (genera ingresos y cruza barato)'}.</p><button class="btn red" data-act="retireok" data-id="${id}">Sí, retirar</button><button class="btn ghost" data-act="close">Cancelar</button>`);break;}
     case 'retireok':{const h=H(id);h.status='retired';h.cond=100;save();render();closeSheet();toast(`${h.name} se fue al rancho 🏡`);break;}
-    case 'sell':{const h=H(id);if(h.syn){toast('Está sindicalizado: no se puede vender');break;}openSheet(`<h3>¿Vender a ${esc(h.name)}?</h3><p class="sub">Recibirás ${fmt(horseValue(h)*0.8)} ahora mismo.</p><button class="btn red" data-act="sellok" data-id="${id}">Sí, vender</button><button class="btn ghost" data-act="close">Cancelar</button>`);break;}
+    case 'sell':{const h=H(id);if(G.svPending&&G.svPending.hid===id){toast('Tiene una venta entre usuarios pendiente');break;}if(h.syn){toast('Está sindicalizado: no se puede vender');break;}openSheet(`<h3>¿Vender a ${esc(h.name)}?</h3><p class="sub">Recibirás ${fmt(horseValue(h)*0.8)} ahora mismo.</p><button class="btn red" data-act="sellok" data-id="${id}">Sí, vender</button><button class="btn ghost" data-act="close">Cancelar</button>`);break;}
     case 'sellok':{const h=H(id);if(h.syn)break;const price=Math.round(horseValue(h)*0.8);const st=sellTo(h);G.money+=price;addTx('Venta directa',h,price,st.name);
       G.horses=G.horses.filter(x=>x.id!==id);if(UI.mare===id)UI.mare=null;if(UI.sire===id)UI.sire=null;save();render();
       openSheet(`<h3>Venta cerrada</h3><div class="card" style="background:#fff"><div class="h">${esc(h.name)}</div><div class="kv"><span>Comprador</span><b>${silk(st.c1,st.c2)} ${esc(st.name)}</b></div><div class="kv"><span>Precio</span><b>+${fmt(price)}</b></div></div><div class="sub">${h.status==='race'&&h.age>=8?'Ahora corre con los colores de esa cuadra.':'El caballo se fue a su nuevo hogar.'}</div><button class="btn gold" data-act="close">Listo</button>`);break;}
-    case 'list':{const h=H(id);if(h.syn){toast('Está sindicalizado: no se puede subastar');break;}const v0=horseValue(h);
+    case 'list':{const h=H(id);if(G.svPending&&G.svPending.hid===id){toast('Tiene una venta entre usuarios pendiente');break;}if(h.syn){toast('Está sindicalizado: no se puede subastar');break;}const v0=horseValue(h);
       const usaOk=rating(h)>=78||(h.tw&&h.tw.gp>0);
       openSheet(`<h3>Subastar a ${esc(h.name)}</h3><div class="sub">Valor de mercado: <b>${fmt(v0)}</b>. Tú pones el precio: si pides más que su valor es más difícil que alguien lo compre.</div><div class="row" style="margin:8px 0"><input type="number" id="lp" inputmode="numeric" step="50" min="${Math.round(v0*0.5/50)*50}" value="${Math.round(v0*1.1/50)*50}" style="flex:1"></div><div class="sub" id="lpn">Subasta Sierra Dorada MX (comisión 6%): probabilidad de venta ≈ ${Math.round(saleProb(v0*1.1,v0)*100)}%</div><button class="btn gold" data-act="listok" data-id="${id}">Subastar en la Subasta Sierra Dorada MX (México)</button>
       <div class="sub" id="lpu" style="margin-top:8px">${usaOk?'Heirloom Place USA (comisión 8%): los compradores pagan hasta 35% más; probabilidad ≈ '+Math.round(saleProb(v0*1.1,v0*1.35)*100)+'%':'La Heirloom Place USA acepta caballos con rating 78+ o ganadores de Clásicos.'}</div>
