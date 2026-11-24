@@ -36,6 +36,7 @@ main{flex:1;overflow-y:auto;padding:12px 12px 16px;-webkit-overflow-scrolling:to
 nav{display:flex;background:var(--hd);border-top:1px solid var(--chipb);padding-bottom:var(--sab)}
 nav button{flex:1;background:none;border:0;color:var(--navc);padding:8px 0 7px;font:600 11px 'Source Sans 3';display:flex;flex-direction:column;align-items:center;gap:2px}
 nav button span{font-size:21px;line-height:1}
+@media (max-width:520px){nav button{font-size:10px;letter-spacing:-.2px}nav button span{font-size:20px}}
 nav button.on{color:var(--brand)}
 .card{background:var(--card);border-radius:14px;padding:12px;margin-bottom:10px;box-shadow:0 1px 0 rgba(0,0,0,.25)}
 .card.tap{cursor:pointer}
@@ -161,6 +162,7 @@ html[data-theme=atardecer] .badge{background:#ecdcc0}html[data-theme=atardecer] 
   <button data-act="tab" data-v="crianza"><span>🧬</span>Crianza</button>
   <button data-act="tab" data-v="mercado"><span>💰</span>Mercado</button>
   <button data-act="tab" data-v="pista"><span>🏆</span>Pista</button>
+  <button data-act="tab" data-v="parejeras"><span>🤝</span>Parejeras</button>
 </nav>
 
 <div id="sheet" class="sheet hidden"><div class="sheet-bg" data-act="close"></div><div class="sheet-body" id="sheetBody"></div></div>
@@ -1158,7 +1160,8 @@ function render(){
   const m=$('#hMoney');m.textContent=fmt(G.money);m.className=G.money<0?'neg':'';
   $('#hWeek').textContent='USD · Temp. '+(Math.floor((G.week-1)/SEASON_WEEKS)+1)+' · Sem '+(((G.week-1)%SEASON_WEEKS)+1)+'/'+SEASON_WEEKS;
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===UI.tab));
-  const f={rancho:rRancho,cuadra:rCuadra,carreras:rCarreras,crianza:rCrianza,mercado:rMercado,pista:rPista}[UI.tab];
+  if(PJ.st==='room')pjSync();
+  const f={rancho:rRancho,cuadra:rCuadra,carreras:rCarreras,crianza:rCrianza,mercado:rMercado,pista:rPista,parejeras:rParejeras}[UI.tab];
   const st=$('#main').scrollTop;$('#main').innerHTML=f();$('#main').scrollTop=st;
 }
 function horseCard(h){
@@ -2284,6 +2287,7 @@ function drawJockey(ctx,e,ph,gal,mk){
   if(e.you){ctx.strokeStyle='#ffe27a';ctx.lineWidth=0.9;ctx.beginPath();ctx.arc(hd.x+0.6,hd.y+0.6,5.4,0,7);ctx.stroke();}
 }
 function finishRace(){
+  if(RACE&&RACE.pj)return pjFinish();
   if(!RACE||RACE.done)return;RACE.done=true;
   const {r,ents}=RACE;
   const D=r.D;
@@ -2712,12 +2716,342 @@ function setupSheet(init){
 }
 
 /* ============================================================
+   PAREJERAS · carreras no oficiales 1 contra 1 entre dos jugadores (conexión directa, sin servidor propio)
+   ============================================================ */
+const PJ_FX={bic:{inj:1.2,cond:3},est:{inj:1.5,cond:6},ana:{inj:2,cond:10}};
+const PJ_CHARS='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',PJ_PFX='qhsp-';
+const pjNew=()=>({st:'lobby',role:null,code:'',link:null,peer:null,opp:null,oppSel:null,D:220,sel:{hid:null,drugs:[],bet:0,ready:false,alias:''},msg:'',pending:null,t:0});
+let PJ=pjNew();
+const pjRec=()=>{G.pj=G.pj||{w:0,l:0,won:0,lost:0,hist:[]};return G.pj;};
+const pjElig=h=>h.status==='race'&&!h.inj&&!h.sus&&!h.listed&&h.age>=8&&h.cond>=40;
+const pjDrugCost=ids=>ids.reduce((s,id)=>s+((DRUGS.find(x=>x.id===id)||{}).cost||0),0);
+const pjClean=s=>String(s==null?'':s).replace(/[<>&"'`]/g,'').slice(0,24);
+const pjCol=c=>/^#[0-9a-fA-F]{6}$/.test(c)?c:'#888888';
+const pjNum=(v,a,b,d)=>{v=+v;return isFinite(v)?Math.min(b,Math.max(a,v)):d;};
+function pjP(h,D,ids){return peff(h,D)-(h.dopeBoost||0)-(h.medBoost||0)+ids.reduce((s,id)=>s+((DRUGS.find(x=>x.id===id)||{}).boost||0),0);}
+function pjInjP(h,D,ids){
+  const sh=h.shoe,worn=!(sh&&sh.wk>0);
+  const p=clamp(0.024+(D/440)*0.018+(100-h.cond)/100*0.035+(worn?0.015:0)-(staffOf('T').sk-50)/1500,0.01,0.12)*(h.physioRisk||1)*(h.progRisk||1);
+  return Math.min(0.6,p*ids.reduce((m,id)=>m*(PJ_FX[id]?PJ_FX[id].inj:1),1));
+}
+function pjMySel(){
+  const s=PJ.sel,h=s.hid&&H(s.hid);
+  const base={D:PJ.D,bet:s.bet,ready:!!s.ready};
+  if(!h||!pjElig(h))return Object.assign(base,{h:null,ready:false});
+  return Object.assign(base,{h:{n:pjClean(s.alias).trim()||pjClean(h.name),sr:pjClean(h.sireName&&h.sireName!=='—'?h.sireName:'')||'—',coat:h.coat,sex:h.sex,P:+pjP(h,PJ.D,s.drugs).toFixed(3),rc:+reactionOf(h).toFixed(4),st:Math.round(h.start),sa:Math.round(h.stamina),cd:Math.round(h.cond),dr:s.drugs.length>0}});
+}
+function pjCleanSel(m){
+  if(!m||typeof m!=='object')return null;
+  const o={D:DISTS.includes(+m.D)?+m.D:null,bet:Math.round(pjNum(m.bet,0,1e12,0)),ready:!!m.ready,h:null};
+  if(m.h&&typeof m.h==='object'){const x=m.h;
+    o.h={n:pjClean(x.n)||'Caballo',coat:COAT_HEX[x.coat]?x.coat:'alazán',sex:x.sex==='H'?'H':'M',sr:pjClean(x.sr)||'—',P:pjNum(x.P,0,200,0),rc:pjNum(x.rc,0.05,0.6,0.3),st:Math.round(pjNum(x.st,0,100,50)),sa:Math.round(pjNum(x.sa,0,100,50)),cd:Math.round(pjNum(x.cd,0,100,50)),dr:!!x.dr};}
+  return o;
+}
+function pjSend(o){try{if(PJ.link)PJ.link.send(JSON.stringify(o));}catch(e){}}
+const pjKey=s=>JSON.stringify([s.D,s.bet,s.h&&[s.h.n,s.h.P,s.h.cd]]);
+function pjSendSel(){const s=pjMySel();PJ.lastKey=pjKey(s);pjSend(Object.assign({t:'sel'},s));}
+function pjSync(){if(PJ.st!=='room'||PJ.pending||RACE)return;const s=pjMySel();if(pjKey(s)!==PJ.lastKey){PJ.sel.ready=false;pjSendSel();}}
+function pjDestroy(){
+  const l=PJ.link,p=PJ.peer;clearTimeout(PJ.t);PJ=pjNew();
+  try{if(l)l.close();}catch(e){}
+  try{if(p)p.destroy();}catch(e){}
+}
+function pjLoadLib(cb){
+  if(typeof window!=='undefined'&&window.Peer)return cb(true);
+  const urls=['peerjs.min.js','https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'];let i=0;
+  (function next(){
+    if(i>=urls.length)return cb(false);
+    const s=document.createElement('script');s.src=urls[i++];
+    s.onload=()=>{if(window.Peer)cb(true);else next();};s.onerror=next;document.head.appendChild(s);
+  })();
+}
+function pjWrap(conn){
+  const my=PJ;PJ.link={send:x=>conn.send(x),close:()=>{try{conn.close();}catch(e){}}};
+  conn.on('data',d=>{try{pjRecv(typeof d==='string'?JSON.parse(d):d);}catch(e){}});
+  conn.on('close',()=>{if(PJ===my)pjLost();});conn.on('error',()=>{if(PJ===my)pjLost();});
+  pjSend({t:'hi',v:1,name:G.name,c1:G.colors.c1,c2:G.colors.c2});
+}
+function pjLost(){
+  const was=PJ.st;if(was==='lobby')return;
+  const racing=RACE&&RACE.pj&&!RACE.done;
+  pjDestroy();PJ.msg=was==='room'?'Tu rival se desconectó.':'No se pudo conectar.';
+  if(!racing&&UI.tab==='parejeras')render();else if(was==='room')toast('Tu rival se desconectó');
+}
+function pjHost(){
+  if(PJ.st!=='lobby')return;
+  PJ=pjNew();PJ.st='wait';PJ.role='host';PJ.msg='Preparando sala…';render();
+  const my=PJ;
+  pjLoadLib(ok=>{
+    if(PJ!==my)return;
+    if(!ok){pjDestroy();PJ.msg='No se pudo cargar la conexión. Revisa tu internet.';render();return;}
+    let tries=0;
+    const open=()=>{
+      let code='';for(let i=0;i<5;i++)code+=PJ_CHARS[Math.floor(Math.random()*PJ_CHARS.length)];
+      let peer;try{peer=new window.Peer(PJ_PFX+code);}catch(e){pjDestroy();PJ.msg='No se pudo crear la sala.';render();return;}
+      my.peer=peer;
+      peer.on('open',()=>{if(PJ!==my)return;my.code=code;my.msg='';render();});
+      peer.on('connection',c=>{if(PJ!==my)return;if(my.link){try{c.close();}catch(e){}return;}c.on('open',()=>{if(PJ===my)pjWrap(c);});});
+      peer.on('error',e=>{if(PJ!==my)return;if(e&&e.type==='unavailable-id'&&tries++<4){try{peer.destroy();}catch(x){}open();return;}if(my.st==='wait'&&!my.code){pjDestroy();PJ.msg='No se pudo crear la sala. Revisa tu internet.';render();}});
+      peer.on('disconnected',()=>{try{peer.reconnect();}catch(e){}});
+    };open();
+  });
+}
+function pjJoin(code){
+  code=String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(PJ.st!=='lobby')return;
+  if(code.length!==5){toast('El código tiene 5 letras o números');return;}
+  PJ=pjNew();PJ.st='join';PJ.role='guest';PJ.code=code;PJ.msg='Conectando…';render();
+  const my=PJ;
+  pjLoadLib(ok=>{
+    if(PJ!==my)return;
+    if(!ok){pjDestroy();PJ.msg='No se pudo cargar la conexión. Revisa tu internet.';render();return;}
+    let peer;try{peer=new window.Peer();}catch(e){pjDestroy();PJ.msg='No se pudo conectar.';render();return;}
+    my.peer=peer;
+    my.t=setTimeout(()=>{if(PJ===my&&my.st==='join'){pjDestroy();PJ.msg='No se encontró la sala '+code+'. Revisa el código.';render();}},15000);
+    peer.on('open',()=>{if(PJ!==my)return;const c=peer.connect(PJ_PFX+code,{reliable:true});c.on('open',()=>{if(PJ===my)pjWrap(c);});c.on('error',()=>{if(PJ===my)pjLost();});});
+    peer.on('error',e=>{if(PJ!==my)return;pjDestroy();PJ.msg=e&&e.type==='peer-unavailable'?'No se encontró la sala '+code+'. Revisa el código.':'No se pudo conectar.';render();});
+  });
+}
+function pjRecv(m){
+  if(!m||typeof m!=='object')return;
+  if(m.t==='hi'){
+    if(PJ.opp)return;
+    PJ.opp={name:pjClean(m.name)||'Rival',c1:pjCol(m.c1),c2:pjCol(m.c2)};PJ.st='room';clearTimeout(PJ.t);PJ.msg='';
+    if(PJ.role==='host'){pjSend({t:'cfg',D:PJ.D});}
+    pjSendSel();
+    if(UI.tab==='parejeras')render();else toast('🤝 '+PJ.opp.name+' se unió a la parejera');
+    return;
+  }
+  if(!PJ.opp)return;
+  if(m.t==='cfg'){
+    if(PJ.role!=='guest'||!DISTS.includes(+m.D))return;
+    if(PJ.D!==+m.D){PJ.D=+m.D;PJ.sel.ready=false;pjSendSel();}
+    pjRefresh(true);return;
+  }
+  if(m.t==='sel'){
+    const s=pjCleanSel(m);if(!s)return;
+    const prev=PJ.oppSel,key=o=>o?JSON.stringify([o.bet,o.h&&[o.h.n,o.h.P,o.h.cd],o.D]):'';
+    PJ.oppSel=s;
+    if(prev&&key(prev)!==key(s)&&PJ.sel.ready){PJ.sel.ready=false;pjSendSel();}
+    pjRefresh();
+    if(PJ.role==='host')pjTryGo();
+    return;
+  }
+  if(m.t==='go'){pjOnGo(m);return;}
+  if(m.t==='ack'){
+    if(PJ.role!=='host')return;
+    const g=(PJ.pending&&PJ.pending.id===m.id)?PJ.pending:(PJ.late&&PJ.late.id===m.id)?PJ.late:null;
+    if(!g)return;
+    PJ.pending=null;PJ.late=null;clearTimeout(PJ.t);
+    g.ents[1].dr=Array.isArray(m.dr)?m.dr.filter(x=>PJ_FX[x]):[];
+    pjStart(g,0);return;}
+  if(m.t==='abort'){
+    if((PJ.pending&&PJ.pending.id===m.id)||(PJ.late&&PJ.late.id===m.id)){PJ.pending=null;PJ.late=null;clearTimeout(PJ.t);}
+    PJ.sel.ready=false;pjSendSel();PJ.msg=pjClean(m.m)||'La carrera se canceló.';pjRefresh(true);return;
+  }
+}
+function pjValidMine(){
+  const s=PJ.sel,h=s.hid&&H(s.hid);
+  if(!h||!pjElig(h))return 'Elige un caballo apto (sano y con condición de 40 o más).';
+  if(s.bet<0||s.bet+pjDrugCost(s.drugs)>G.money)return 'No te alcanza el dinero para esa apuesta y las sustancias.';
+  return '';
+}
+function pjTryGo(){
+  if(PJ.role!=='host'||PJ.st!=='room'||PJ.pending||RACE)return;
+  const a=PJ.sel,b=PJ.oppSel;
+  if(!a.ready||!b||!b.ready||!b.h||b.D!==PJ.D)return;
+  const bad=pjValidMine();if(bad){a.ready=false;PJ.msg=bad;pjSendSel();pjRefresh(true);return;}
+  const me=pjMySel(),D=PJ.D;if(!me.h)return;
+  const mk=(x,name,c1,c2)=>{
+    const T=BASE_T[D]*(1.055-0.11*x.P/100)*(1+clamp(randn(),-2,2)*0.008)+x.rc;
+    const g=clamp(1-0.18*(x.st-50)/50-0.18*Tfn(D)*(50-x.sa)/50,0.75,1.25);
+    return{n:x.n,coat:x.coat,sex:x.sex,own:name,c1,c2,T:+T.toFixed(3),rc:x.rc,g:+g.toFixed(4),ph:+(Math.random()*6).toFixed(3)};
+  };
+  const lanes=Math.random()<0.5?[0,1]:[1,0];
+  const e0=Object.assign(mk(me.h,G.name,G.colors.c1,G.colors.c2),{lane:lanes[0],dr:a.drugs.slice()});
+  const e1=Object.assign(mk(b.h,PJ.opp.name,PJ.opp.c1,PJ.opp.c2),{lane:lanes[1],dr:[]});
+  const go={t:'go',id:Date.now()+'-'+Math.floor(Math.random()*1e6),D,ents:[e0,e1],bets:{h:a.bet,g:b.bet}};
+  PJ.pending=go;pjSend(go);
+  clearTimeout(PJ.t);PJ.t=setTimeout(()=>{if(PJ.pending===go){PJ.pending=null;PJ.late=go;a.ready=false;PJ.msg='Tu rival no respondió. Intenta de nuevo.';pjSendSel();pjRefresh(true);}},15000);
+}
+const Tfn=D=>Math.log(D/110)/Math.log(4);
+function pjOnGo(m){
+  if(PJ.role!=='guest'||!PJ.opp||!PJ.oppSel)return;
+  const abort=t=>{pjSend({t:'abort',id:m.id,m:t});};
+  if(RACE){abort('Tu rival está en otra carrera.');return;}
+  const D=+m.D;
+  if(!DISTS.includes(D)||D!==PJ.D||!Array.isArray(m.ents)||m.ents.length!==2||!m.bets){abort('Datos inválidos.');return;}
+  if(!PJ.sel.ready||!PJ.oppSel.ready){abort('Cambió la configuración.');return;}
+  if(+m.bets.g!==PJ.sel.bet||+m.bets.h!==PJ.oppSel.bet){abort('Las apuestas no coinciden.');return;}
+  const bad=pjValidMine();if(bad){abort(bad);return;}
+  const mine=pjMySel();
+  const ents=m.ents.map(e=>({n:pjClean(e.n)||'Caballo',coat:COAT_HEX[e.coat]?e.coat:'alazán',sex:e.sex==='H'?'H':'M',own:pjClean(e.own),c1:pjCol(e.c1),c2:pjCol(e.c2),T:pjNum(e.T,3,60,20),rc:pjNum(e.rc,0.05,0.6,0.3),g:pjNum(e.g,0.75,1.25,1),ph:pjNum(e.ph,0,7,0),lane:+e.lane===1?1:0,dr:Array.isArray(e.dr)?e.dr.filter(x=>PJ_FX[x]):[]}));
+  if(ents[0].lane===ents[1].lane||!mine.h||ents[1].n!==mine.h.n){abort('Datos inválidos.');return;}
+  pjSend({t:'ack',id:m.id,dr:PJ.sel.drugs.filter(x=>PJ_FX[x])});
+  pjStart({D,ents,bets:{h:+m.bets.h,g:+m.bets.g}},1);
+}
+/* Liquida y arranca la animación. mi=0 anfitrión, 1 invitado. El resultado ya está decidido por los tiempos. */
+function pjStart(go,mi){
+  const D=go.D,me=go.ents[mi],op=go.ents[1-mi];
+  const h=H(PJ.sel.hid);if(!h){return;}
+  const drugs=PJ.sel.drugs.slice(),bet=mi===0?go.bets.h:go.bets.g,obet=mi===0?go.bets.g:go.bets.h;
+  const win=me.T<op.T||(me.T===op.T&&mi===0);
+  const dcost=pjDrugCost(drugs);
+  G.money-=dcost;G.money+=win?obet:-bet;
+  const cl=Math.round(20+D/30+drugs.reduce((s,id)=>s+PJ_FX[id].cond,0));
+  h.cond=clamp(h.cond-cl,0,100);
+  const mult=drugs.reduce((mm,id)=>mm*PJ_FX[id].inj,1),old=h.progRisk||1;
+  h.progRisk=old*mult;const it=rollInjury(h,D);h.physioRisk=1;h.progRisk=1;
+  const R=pjRec();if(win){R.w++;R.won+=obet;}else{R.l++;R.lost+=bet;}
+  R.hist.unshift({w:G.week,opp:op.own,horse:h.name+(me.n!==h.name?' («'+me.n+'»)':''),rival:op.n,D,bet:win?obet:-bet,win});R.hist=R.hist.slice(0,15);
+  save();
+  const out={win,dcost,bet,obet,cl,it,drugs,mi,odr:op.dr};
+  PJ.sel.ready=false;if(PJ.oppSel)PJ.oppSel.ready=false;
+  if(!pjElig(h))PJ.sel.hid=null;
+  pjSendSel();
+  pjAnim(go,mi,out);
+}
+function pjAnim(go,mi,out){
+  const D=go.D;
+  const ents=go.ents.map((e,i)=>({h:{name:e.n,coat:e.coat,sex:e.sex},you:i===mi,lane:e.lane,c1:e.c1,c2:e.c2,stable:e.own,T:e.T,react:e.rc,g:e.g,phase:e.ph,dope:null,pjdr:e.dr})).sort((a,b)=>a.lane-b.lane);
+  RACE={r:{name:'Parejera',D,purse:0,tier:'pj'},h:null,ents,done:false,skip:false,tr:null,start:0,snd:{},dope:null,pj:{out,go,mi}};
+  audioInit();crowdStart();
+  $('#rMute').textContent=G.mute?'🔇':'🔊';
+  closeSheet();
+  $('#race').classList.remove('hidden');
+  $('#rTitle').textContent='🤝 Parejera · '+D+' yd';
+  $('#rSub').textContent='Carrera no oficial · Apuesta '+fmt(out.bet)+' vs '+fmt(out.obet);
+  $('#rRes').innerHTML='';$('#rSkip').style.display='';$('#rClock').textContent='0.00';
+  applyTZ();sizeRace();
+  RACE.start=performance.now();
+  requestAnimationFrame(raceLoop);
+}
+function pjFinish(){
+  if(!RACE||RACE.done)return;RACE.done=true;
+  const {out,go,mi}=RACE.pj,D=go.D;
+  const res=[...RACE.ents].sort((a,b)=>a.T-b.T);
+  crowdStop();
+  if(out.win)snd(()=>{[523,659,784,1047].forEach((f,i)=>tone(f,0.35,0.2,'triangle',i*0.14));});
+  $('#rBig').textContent='';$('#rSkip').style.display='none';
+  drawRace(1e9);
+  const net=out.win?out.obet:-out.bet,lead=res[0].T;
+  const names=ids=>ids.map(id=>(DRUGS.find(x=>x.id===id)||{name:id}).name.replace(' prohibido','')).join(', ');
+  const ordn=['1º','2º'];
+  RACE.ents.forEach(e=>{if(!e.you)RACE.oppDr=e.pjdr;});
+  const odr=RACE.oppDr||[];
+  RACE.pj.shown=true;
+  $('#rRes').innerHTML=`<div class="res"><div class="row"><h3>${out.win?'🏆 ¡Ganaste la parejera!':'Perdiste la parejera'}</h3><span class="sp"></span><b style="color:${net>=0?'#1c5a35':'#8c261b'}">${net>=0?'+':''}${fmt(net)}</b></div>
+    <div class="sub" style="margin:4px 0">Apuestas: tú ${fmt(out.bet)} · rival ${fmt(out.obet)}. ${out.win?'Te llevas la apuesta de tu rival.':'Tu rival se lleva tu apuesta.'}</div>
+    ${out.dcost?`<div class="sub" style="margin:4px 0">🧪 Tus sustancias (${names(out.drugs)}): −${fmt(out.dcost)}</div>`:''}
+    <div class="sub" style="margin:4px 0">🧪 Sustancias del rival: ${odr.length?names(odr):'ninguna'}</div>
+    <div class="sub" style="margin:4px 0">💪 Desgaste: −${out.cl} de condición</div>
+    ${out.it?`<div class="recban" style="background:#f2d3ce;color:#8c261b">🩹 ¡Tu caballo se lesionó! ${out.it.name}${out.it.sev===4?' · queda retirado de las pistas':' · gravedad '+SEV[out.it.sev]+'. Revisa la clínica veterinaria.'}</div>`:''}
+    <div class="sub" style="margin:4px 0">Carrera no oficial: no cuenta para récords, temporada, Speed Index ni estadísticas.</div>
+    ${res.map((e,i)=>`<div class="pos ${e.you?'you':''}"><b>${i+1}</b><span><span class="pn" style="background:${POST[e.lane].bg};color:${POST[e.lane].fg}">${e.lane+1}</span> ${silk(e.c1,e.c2)} ${esc(e.h.name)}<small>${esc(e.stable)}</small></span><span style="text-align:right"><b>${e.T.toFixed(2)} s</b>${i?`<small>+${(e.T-lead).toFixed(2)}</small>`:'<small>ganador</small>'}</span></div>`).join('')}
+    <button class="btn gold" data-act="endrace">Continuar</button></div>`;
+  render();
+}
+function pjOppHTML(){
+  const o=PJ.opp,s=PJ.oppSel;if(!o)return'';
+  const hs=s&&s.h;
+  return `<div class="row">${silk(o.c1,o.c2)}<div class="h">${esc(o.name)}</div><span class="sp"></span><span class="badge ${s&&s.ready?'g':'y'}">${s&&s.ready?'Listo':'Preparando'}</span></div>
+  <div class="sub" style="margin-top:4px">${hs?`🐎 <b>${esc(hs.n)}</b> · ${hs.sex==='H'?'hija':'hijo'} de ${esc(hs.sr)} · pelaje ${esc(hs.coat)}<br>Sin récord ni historial: no sabes qué caballo es.`:'Aún no elige caballo'}<br>💰 Apuesta: <b>${fmt(s?s.bet:0)}</b></div>`;
+}
+function pjActHTML(){
+  const bad=pjValidMine(),ready=PJ.sel.ready,o=PJ.oppSel;
+  const wait=ready?(o&&o.ready?'Iniciando…':'Esperando a '+esc(PJ.opp.name)+'…'):'';
+  return `<button class="btn ${ready?'ghost':'gold'}" data-act="pjready" ${(!ready&&bad)?'disabled':''}>${ready?'↩ Cancelar (cambiar algo)':'✅ Listo para correr'}</button>
+  ${(!ready&&bad)?`<div class="sub" style="margin-top:4px;color:#8c261b">${bad}</div>`:''}${wait?`<div class="sub" style="margin-top:4px">${wait}</div>`:''}${PJ.msg?`<div class="note" style="margin-top:6px">${esc(PJ.msg)}</div>`:''}`;
+}
+function pjSumHTML(){
+  const h=PJ.sel.hid&&H(PJ.sel.hid);if(!h||!pjElig(h))return'<div class="sub">Elige un caballo para ver su riesgo.</div>';
+  const ids=PJ.sel.drugs,cl=Math.round(20+PJ.D/30+ids.reduce((s,id)=>s+PJ_FX[id].cond,0));
+  return `<div class="sub">💪 Desgaste: −${cl} de condición · 🩹 Riesgo de lesión: <b>${Math.round(pjInjP(Object.assign({},h,{cond:Math.max(0,h.cond-cl)}),PJ.D,ids)*100)}%</b> · 🧪 Sustancias: ${fmt(pjDrugCost(ids))}</div>`;
+}
+function pjRefresh(full){
+  if(UI.tab!=='parejeras'||RACE)return;
+  if(full)return render();
+  const a=$('#pjOpp'),b=$('#pjAct');
+  if(a)a.innerHTML=pjOppHTML();if(b)b.innerHTML=pjActHTML();
+}
+function rParejeras(){
+  const R=pjRec();
+  let h=`<div class="row"><h3>🤝 Parejeras</h3></div>`;
+  if(PJ.st==='lobby'){
+    h+=`<div class="note">Carreras <b>no oficiales</b> de uno contra uno con otro jugador conectado. Cada quien decide cuánto apuesta y <b>el ganador se lleva la apuesta del rival</b>. Aquí se permiten sustancias prohibidas (cuestan dinero, desgastan y suben el riesgo de lesión). No cuentan para récords, temporada ni estadísticas.</div>
+    ${PJ.msg?`<div class="note" style="background:#fbe4df;border-color:#b23a2e">${esc(PJ.msg)}</div>`:''}
+    <button class="btn gold" data-act="pjhost">🏁 Crear sala</button>
+    <div class="card" style="margin-top:10px"><div class="title">Unirme a la sala de un amigo</div>
+      <input id="pjCode" type="text" maxlength="5" placeholder="Código de 5 letras" autocapitalize="characters" autocomplete="off" style="text-transform:uppercase;margin-top:6px"><button class="btn" data-act="pjjoin" style="margin-top:6px">Unirme</button></div>
+    <div class="card"><div class="title">Tu historial de parejeras</div><div class="sub">Ganadas <b>${R.w}</b> · Perdidas <b>${R.l}</b> · Ganado ${fmt(R.won)} · Perdido ${fmt(R.lost)}</div>
+    ${R.hist.map(x=>`<div class="sub" style="margin-top:3px">${x.win?'🏆':'✖'} ${esc(x.horse)} vs ${esc(x.rival)} (${esc(x.opp)}) · ${x.D} yd · ${x.bet>=0?'+':''}${fmt(x.bet)}</div>`).join('')}</div>`;
+    return h;
+  }
+  if(PJ.st==='wait'){
+    h+=PJ.code?`<div class="card" style="text-align:center"><div class="sub">Código de tu sala</div><div style="font:700 44px 'Oswald',sans-serif;letter-spacing:.18em;margin:6px 0">${PJ.code}</div><div class="sub">Pásaselo a tu rival. Cuando entre, empieza la parejera.</div>
+    <div class="row" style="gap:6px;margin-top:8px"><button class="btn gold" style="flex:1" data-act="pjshare">📤 Compartir</button><button class="btn ghost" style="flex:1" data-act="pjcopy">📋 Copiar</button></div></div>`:`<div class="note">${esc(PJ.msg||'Preparando sala…')}</div>`;
+    return h+`<button class="btn ghost" data-act="pjleave">Cancelar</button>`;
+  }
+  if(PJ.st==='join')return h+`<div class="note">${esc(PJ.msg||'Conectando…')}</div><button class="btn ghost" data-act="pjleave">Cancelar</button>`;
+  /* sala */
+  const els=G.horses.filter(pjElig);
+  h+=`<div class="card" id="pjOpp">${pjOppHTML()}</div>
+  <div class="title" style="color:var(--muted)">Distancia ${PJ.role==='host'?'':'(la elige el anfitrión)'}</div>
+  ${PJ.role==='host'?`<div class="seg" style="flex-wrap:wrap">${DISTS.map(d=>`<button class="${PJ.D===d?'on':''}" data-act="pjdist" data-v="${d}">${d}</button>`).join('')}</div>`:`<div class="sub"><b>${PJ.D} yd</b></div>`}
+  <div class="title" style="color:var(--muted)">Tu caballo</div>
+  ${els.length?els.map(x=>`<div class="card tap" data-act="pjhorse" data-id="${x.id}" style="${PJ.sel.hid===x.id?'outline:2px solid var(--gold)':''}"><div class="row"><span class="dot" style="background:${COAT_HEX[x.coat]}"></span><div class="h">${esc(x.name)}</div><span class="sp"></span><span class="sub">Rating ${Math.round(rating(x))} · Cond ${Math.round(x.cond)}</span></div></div>`).join(''):'<div class="note">No tienes caballos aptos (deben estar sanos, en competencia y con condición de 40 o más).</div>'}
+  <div class="title" style="color:var(--muted)">Nombre con el que corre</div>
+  <input id="pjAlias" type="text" maxlength="20" value="${esc(PJ.sel.alias||'')}" placeholder="Nombre falso para tu rival (opcional)" autocomplete="off">
+  <div class="sub" style="margin-top:4px">Tu rival solo verá este nombre y de quién es hijo; nunca su récord ni sus victorias. Si lo dejas vacío, saldrá su nombre real.</div>
+  <div class="title" style="color:#8c261b">Sustancias prohibidas (sin control)</div>
+  <div class="row" style="gap:6px">${DRUGS.map(x=>`<button class="btn sm ${PJ.sel.drugs.includes(x.id)?'red':'ghost'}" style="flex:1 1 0;min-width:0;font-size:11px;letter-spacing:0;padding:8px 2px" data-act="pjdrug" data-id="${x.id}">${x.name.replace(' prohibido','')}<br>+${x.boost} · ${fmt(x.cost)}</button>`).join('')}</div>
+  <div class="sub" style="margin-top:4px">Se pueden combinar. Cada una suma rating, pero gasta condición y sube el riesgo de lesión.</div>
+  <div class="title" style="color:var(--muted)">Tu apuesta</div>
+  <div class="row" style="gap:6px"><input id="pjBet" type="text" inputmode="numeric" value="${PJ.sel.bet||''}" placeholder="$0" style="flex:1"></div>
+  <div class="row" style="gap:6px;margin-top:6px">${[10000,100000,1000000].map(v=>`<button class="btn sm ghost" style="flex:1" data-act="pjbet" data-v="${v}">${fmt(v)}</button>`).join('')}<button class="btn sm ghost" style="flex:1" data-act="pjbet" data-v="all">Todo</button></div>
+  <div class="sub" style="margin-top:4px">Tienes ${fmt(G.money)}. El ganador se lleva la apuesta del rival.</div>
+  <div class="card" id="pjSum" style="margin-top:8px">${pjSumHTML()}</div>
+  <div id="pjAct">${pjActHTML()}</div>
+  <button class="btn ghost" data-act="pjleave" style="margin-top:8px">Salir de la sala</button>`;
+  return h;
+}
+function pjChanged(){PJ.sel.ready=false;PJ.msg='';pjSendSel();}
+function pjAction(a,t){
+  const id=t.dataset.id,v=t.dataset.v;
+  if(PJ.pending&&a!=='pjleave'){toast('Iniciando la carrera…');return;}
+  switch(a){
+    case 'pjhost':pjHost();break;
+    case 'pjjoin':{const e=$('#pjCode');pjJoin(e?e.value:'');break;}
+    case 'pjleave':{const was=PJ.st;pjDestroy();if(was==='room')toast('Saliste de la sala');render();break;}
+    case 'pjdist':{if(PJ.role!=='host'||!DISTS.includes(+v))break;PJ.D=+v;pjSend({t:'cfg',D:PJ.D});pjChanged();render();break;}
+    case 'pjhorse':{PJ.sel.hid=id;pjChanged();render();break;}
+    case 'pjdrug':{const i=PJ.sel.drugs.indexOf(id);if(i>=0)PJ.sel.drugs.splice(i,1);else if(PJ_FX[id])PJ.sel.drugs.push(id);pjChanged();render();break;}
+    case 'pjbet':{PJ.sel.bet=v==='all'?Math.max(0,Math.floor(G.money-pjDrugCost(PJ.sel.drugs))):Math.min(+v,Math.max(0,Math.floor(G.money)));pjChanged();render();break;}
+    case 'pjready':{
+      if(PJ.sel.ready){PJ.sel.ready=false;pjSendSel();render();break;}
+      const bad=pjValidMine();if(bad){toast(bad);break;}
+      PJ.sel.ready=true;PJ.msg='';pjSendSel();render();if(PJ.role==='host')pjTryGo();break;}
+    case 'pjshare':{const tx='Juega una parejera conmigo en Quarter Horse Simulator. Código de sala: '+PJ.code;try{if(navigator.share){navigator.share({text:tx});break;}}catch(e){}pjAction('pjcopy',t);break;}
+    case 'pjcopy':{try{navigator.clipboard.writeText(PJ.code);toast('Código copiado: '+PJ.code);}catch(e){toast('Código: '+PJ.code);}break;}
+  }
+}
+document.addEventListener('input',e=>{
+  if(e.target&&e.target.id==='pjAlias'&&!PJ.pending){PJ.sel.alias=pjClean(e.target.value).slice(0,20);PJ.sel.ready=false;PJ.msg='';pjSendSel();const b=$('#pjAct');if(b)b.innerHTML=pjActHTML();return;}
+  if(!e.target||e.target.id!=='pjBet'||PJ.pending)return;
+  const n=Math.max(0,parseInt(String(e.target.value).replace(/\D/g,''),10)||0);
+  PJ.sel.bet=Math.min(n,1e12);PJ.sel.ready=false;PJ.msg='';pjSendSel();
+  const s=$('#pjSum');if(s)s.innerHTML=pjSumHTML();const b=$('#pjAct');if(b)b.innerHTML=pjActHTML();
+});
+
+
+/* ============================================================
    EVENTOS
    ============================================================ */
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t)return;
   const a=t.dataset.act,id=t.dataset.id,v=t.dataset.v;
   switch(a){
+    case 'pjhost':case 'pjjoin':case 'pjleave':case 'pjdist':case 'pjhorse':case 'pjdrug':case 'pjbet':case 'pjready':case 'pjshare':case 'pjcopy':pjAction(a,t);break;
     case 'tab':UI.tab=v;render();break;
     case 'ranchname':{const n=(($('#ranchn')&&$('#ranchn').value)||'').trim();if(n){G.ranch=n.slice(0,26);save();render();toast('Nombre del rancho guardado');}break;}
     case 'close':if(t.classList.contains('sheet-bg')&&SETUP.first&&!SETUP.done)break;closeSheet();break;
