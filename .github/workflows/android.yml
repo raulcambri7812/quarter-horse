@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+permissions:
+  contents: write
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -23,3 +25,10 @@ jobs:
         with:
           name: QuarterHorse-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Publicar el APK para descargarlo desde el celular
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk QuarterHorse-prueba.apk
+          gh release delete prueba --yes --cleanup-tag || true
+          gh release create prueba QuarterHorse-prueba.apk --title "APK de prueba (Android)" --notes "Descarga QuarterHorse-prueba.apk en tu Android e instálalo. Es una versión de prueba."
