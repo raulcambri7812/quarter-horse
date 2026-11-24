@@ -1,0 +1,30 @@
+{
+ "name": "Quarter Horse Simulator",
+ "short_name": "Quarter Horse",
+ "description": "Cría, entrena y corre caballos de cuarto de milla en el Hipódromo Sierra Dorada.",
+ "start_url": "./index.html",
+ "scope": "./",
+ "display": "standalone",
+ "orientation": "portrait",
+ "background_color": "#4f7a5a",
+ "theme_color": "#4f7a5a",
+ "lang": "es-MX",
+ "icons": [
+  {
+   "src": "icons/icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png"
+  },
+  {
+   "src": "icons/icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  },
+  {
+   "src": "icons/maskable-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ]
+}

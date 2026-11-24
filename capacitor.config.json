@@ -1,0 +1,11 @@
+{
+ "appId": "mx.sierradorada.quarterhorse",
+ "appName": "Quarter Horse Simulator",
+ "webDir": "www",
+ "server": {
+  "androidScheme": "https"
+ },
+ "android": {
+  "backgroundColor": "#4f7a5a"
+ }
+}
