@@ -2796,8 +2796,14 @@ function pjHost(){
     };open();
   });
 }
+function pjExtract(t){
+  t=String(t||'').toUpperCase().replace(PJ_PFX.toUpperCase(),'');
+  const m=t.match(/(?:^|[^A-Z0-9])([A-Z0-9]{5})(?![A-Z0-9])/g);
+  if(m&&m.length)return m[m.length-1].replace(/[^A-Z0-9]/g,'');
+  return t.replace(/[^A-Z0-9]/g,'').slice(0,5);
+}
 function pjJoin(code){
-  code=String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  code=pjExtract(code);
   if(PJ.st!=='lobby')return;
   if(code.length!==5){toast('El código tiene 5 letras o números');return;}
   PJ=pjNew();PJ.st='join';PJ.role='guest';PJ.code=code;PJ.msg='Conectando…';render();
@@ -2982,13 +2988,13 @@ function rParejeras(){
     ${PJ.msg?`<div class="note" style="background:#fbe4df;border-color:#b23a2e">${esc(PJ.msg)}</div>`:''}
     <button class="btn gold" data-act="pjhost">🏁 Crear sala</button>
     <div class="card" style="margin-top:10px"><div class="title">Unirme a la sala de un amigo</div>
-      <input id="pjCode" type="text" maxlength="5" placeholder="Código de 5 letras" autocapitalize="characters" autocomplete="off" style="text-transform:uppercase;margin-top:6px"><button class="btn" data-act="pjjoin" style="margin-top:6px">Unirme</button></div>
+      <input id="pjCode" type="text" placeholder="Pega o escribe el código" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" style="text-transform:uppercase;margin-top:6px;-webkit-user-select:text;user-select:text"><div class="row" style="gap:6px;margin-top:6px"><button class="btn ghost" style="flex:1" data-act="pjpaste">📋 Pegar</button><button class="btn" style="flex:2" data-act="pjjoin">Unirme</button></div></div>
     <div class="card"><div class="title">Tu historial de parejeras</div><div class="sub">Ganadas <b>${R.w}</b> · Perdidas <b>${R.l}</b> · Ganado ${fmt(R.won)} · Perdido ${fmt(R.lost)}</div>
     ${R.hist.map(x=>`<div class="sub" style="margin-top:3px">${x.win?'🏆':'✖'} ${esc(x.horse)} vs ${esc(x.rival)} (${esc(x.opp)}) · ${x.D} yd · ${x.bet>=0?'+':''}${fmt(x.bet)}</div>`).join('')}</div>`;
     return h;
   }
   if(PJ.st==='wait'){
-    h+=PJ.code?`<div class="card" style="text-align:center"><div class="sub">Código de tu sala</div><div style="font:700 44px 'Oswald',sans-serif;letter-spacing:.18em;margin:6px 0">${PJ.code}</div><div class="sub">Pásaselo a tu rival. Cuando entre, empieza la parejera.</div>
+    h+=PJ.code?`<div class="card" style="text-align:center"><div class="sub">Código de tu sala</div><div data-act="pjcopy" style="font:700 44px 'Oswald',sans-serif;letter-spacing:.18em;margin:6px 0;-webkit-user-select:text;user-select:text">${PJ.code}</div><div class="sub">Pásaselo a tu rival. Cuando entre, empieza la parejera.</div>
     <div class="row" style="gap:6px;margin-top:8px"><button class="btn gold" style="flex:1" data-act="pjshare">📤 Compartir</button><button class="btn ghost" style="flex:1" data-act="pjcopy">📋 Copiar</button></div></div>`:`<div class="note">${esc(PJ.msg||'Preparando sala…')}</div>`;
     return h+`<button class="btn ghost" data-act="pjleave">Cancelar</button>`;
   }
@@ -3015,6 +3021,14 @@ function rParejeras(){
   <button class="btn ghost" data-act="pjleave" style="margin-top:8px">Salir de la sala</button>`;
   return h;
 }
+function pjCopy(txt){
+  const done=()=>toast('Código copiado: '+txt);
+  try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(done).catch(()=>pjCopy2(txt));return;}}catch(e){}
+  pjCopy2(txt);
+}
+function pjCopy2(txt){
+  try{const a=document.createElement('textarea');a.value=txt;a.style.cssText='position:fixed;top:0;left:0;opacity:0';document.body.appendChild(a);a.focus();a.select();const ok=document.execCommand('copy');a.remove();toast(ok?'Código copiado: '+txt:'Código: '+txt+' (mantén presionado para copiar)');}catch(e){toast('Código: '+txt);}
+}
 function pjChanged(){PJ.sel.ready=false;PJ.msg='';pjSendSel();}
 function pjAction(a,t){
   const id=t.dataset.id,v=t.dataset.v;
@@ -3031,8 +3045,11 @@ function pjAction(a,t){
       if(PJ.sel.ready){PJ.sel.ready=false;pjSendSel();render();break;}
       const bad=pjValidMine();if(bad){toast(bad);break;}
       PJ.sel.ready=true;PJ.msg='';pjSendSel();render();if(PJ.role==='host')pjTryGo();break;}
-    case 'pjshare':{const tx='Juega una parejera conmigo en Quarter Horse Simulator. Código de sala: '+PJ.code;try{if(navigator.share){navigator.share({text:tx});break;}}catch(e){}pjAction('pjcopy',t);break;}
-    case 'pjcopy':{try{navigator.clipboard.writeText(PJ.code);toast('Código copiado: '+PJ.code);}catch(e){toast('Código: '+PJ.code);}break;}
+    case 'pjshare':{const tx='Juega una parejera conmigo en Quarter Horse Simulator. Código de sala: '+PJ.code;try{if(navigator.share){navigator.share({text:tx});break;}}catch(e){}pjCopy(PJ.code);break;}
+    case 'pjcopy':{pjCopy(PJ.code);break;}
+    case 'pjpaste':{
+      const put=x=>{const e=$('#pjCode');if(e){e.value=pjExtract(x);e.focus();}};
+      try{navigator.clipboard.readText().then(x=>{if(x)put(x);else toast('No hay nada copiado');}).catch(()=>toast('Mantén presionado el campo y elige Pegar'));}catch(e){toast('Mantén presionado el campo y elige Pegar');}break;}
   }
 }
 document.addEventListener('input',e=>{
@@ -3051,7 +3068,7 @@ document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t)return;
   const a=t.dataset.act,id=t.dataset.id,v=t.dataset.v;
   switch(a){
-    case 'pjhost':case 'pjjoin':case 'pjleave':case 'pjdist':case 'pjhorse':case 'pjdrug':case 'pjbet':case 'pjready':case 'pjshare':case 'pjcopy':pjAction(a,t);break;
+    case 'pjhost':case 'pjjoin':case 'pjleave':case 'pjdist':case 'pjhorse':case 'pjdrug':case 'pjbet':case 'pjready':case 'pjshare':case 'pjcopy':case 'pjpaste':pjAction(a,t);break;
     case 'tab':UI.tab=v;render();break;
     case 'ranchname':{const n=(($('#ranchn')&&$('#ranchn').value)||'').trim();if(n){G.ranch=n.slice(0,26);save();render();toast('Nombre del rancho guardado');}break;}
     case 'close':if(t.classList.contains('sheet-bg')&&SETUP.first&&!SETUP.done)break;closeSheet();break;
