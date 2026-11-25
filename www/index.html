@@ -57,6 +57,10 @@ nav button.on{color:var(--brand)}
 .chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:6px}
 .chip{flex:none;border:1.5px solid var(--chipb);background:transparent;color:var(--chipc);padding:7px 12px;border-radius:99px;font:700 14px 'Oswald';letter-spacing:.03em}
 .chip.on{background:var(--gold);border-color:var(--gold);color:#1b1305}
+.hero{position:relative;aspect-ratio:1.8;max-height:280px;border-radius:14px;overflow:hidden;margin-bottom:10px;background:#222;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.hero img{width:100%;height:100%;object-fit:cover;display:block}
+.hero b{position:absolute;left:0;right:0;bottom:0;padding:26px 12px 8px;color:#fff;font:600 19px/1.1 'Oswald',Impact,sans-serif;letter-spacing:.06em;text-transform:uppercase;background:linear-gradient(transparent,rgba(0,0,0,.72))}
+.hero.paper{aspect-ratio:2;max-height:none}
 .seg{display:flex;background:var(--segbg);border-radius:10px;padding:3px;margin-bottom:10px}
 .seg button{flex:1;border:0;background:transparent;color:var(--segc);padding:8px 4px;border-radius:8px;font:700 13px 'Source Sans 3'}
 .seg button.on{background:var(--gold);color:#1b1305}
@@ -691,7 +695,7 @@ const breederOf=h=>h.br==='me'?G.name:(h.br||(h.sid!=null&&G.stables[h.sid]?G.st
 const nodeOf=x=>({n:x.name,s:x.ped?x.ped.s:null,d:x.ped?x.ped.d:null});
 function trim(n,k){return(!n||k<=0)?null:{n:n.n,s:trim(n.s,k-1),d:trim(n.d,k-1)};}
 function newGame(name,colors){
-  G={siv:2,kids:{},trophies:[],staff:{T:{id:'T0',s:1},J:{id:'J0',s:1},F:{id:'F0',s:1}},nm2:1,priceIdx:[],tx:[],classics:[],sireW:{},name:name||'Cuadra Los Aztecas',colors:colors||{c1:SW[0],c2:SW[9]},money:50000,week:1,nid:1,rid:1,earnS:0,hall:[],
+  G={siv:2,kids:{},trophies:[],staff:{T:{id:'T0',s:1},J:{id:'J0',s:1},F:{id:'F0',s:1}},nm2:1,priceIdx:[],tx:[],classics:[],sireW:{},name:name||'Cuadra Los Aztecas',colors:colors||{c1:SW[0],c2:SW[9]},money:100000,week:1,nid:1,rid:1,earnS:0,hall:[],
     horses:[],races:[],auction:[],news:[],records:{},stables:[],rivalHorses:[]};
   for(const D of DISTS)G.records[D]=Object.assign({week:0,you:false},SEED_RECORDS[D]);
   G.stables=RIVALS.map(r=>Object.assign({earn:0,wins:0},r));G.rstuds=[];ensureRLabs();
@@ -1155,6 +1159,8 @@ const fmtT=t=>t.toFixed(2)+' s';
 /* ============================================================
    RENDER
    ============================================================ */
+const HERO={cuadra:['cuadra','Mi cuadra'],carreras:['carreras','Carreras'],crianza:['crianza','Crianza y genética'],mercado:['mercado','Mercado'],pista:['pista',''],parejeras:['parejeras','Parejeras']};
+function heroHTML(k){const x=HERO[k];if(!x)return'';return `<div class="hero${k==='pista'?' paper':''}"><img src="img/${x[0]}.webp" alt="" decoding="async" onerror="this.parentNode.style.display='none'">${x[1]?`<b>${x[1]}</b>`:''}</div>`;}
 function render(){
   $('#hName').innerHTML=silk(G.colors.c1,G.colors.c2)+' '+esc(G.name)+' ✏️';
   const m=$('#hMoney');m.textContent=fmt(G.money);m.className=G.money<0?'neg':'';
@@ -1162,7 +1168,7 @@ function render(){
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===UI.tab));
   if(PJ.st==='room')pjSync();
   const f={rancho:rRancho,cuadra:rCuadra,carreras:rCarreras,crianza:rCrianza,mercado:rMercado,pista:rPista,parejeras:rParejeras}[UI.tab];
-  const st=$('#main').scrollTop;$('#main').innerHTML=f();$('#main').scrollTop=st;
+  const st=$('#main').scrollTop;$('#main').innerHTML=heroHTML(UI.tab)+f();$('#main').scrollTop=st;
 }
 function horseCard(h){
   return `<div class="card tap" data-act="horse" data-id="${h.id}">
@@ -1453,6 +1459,7 @@ function predictionHTML(){
     <div class="sub" style="margin-top:6px">La veterinaria oficial, ${VET}, atiende a la yegua y al semental en cada servicio. Gestación: 4 semanas. El potro madura 8 semanas después de nacer.</div></div>`;
   return h;
 }
+const aSort=l=>UI.asort==='asc'?l.slice().sort((a,b)=>a.price-b.price):UI.asort==='desc'?l.slice().sort((a,b)=>b.price-a.price):l;
 function rMercado(){
   let h=`<div class="seg"><button class="${UI.mtab==='sub'?'on':''}" data-act="mtab" data-v="sub">🇲🇽 Subasta MX</button><button class="${UI.mtab==='studs'?'on':''}" data-act="mtab" data-v="studs">Sementales</button><button class="${UI.mtab==='cuad'?'on':''}" data-act="mtab" data-v="cuad">Cuadras</button><button class="${UI.mtab==='leg'?'on':''}" data-act="mtab" data-v="leg">🧬 Genética</button><button class="${UI.mtab==='usr'?'on':''}" data-act="mtab" data-v="usr">🤝 Entre usuarios</button></div>`;
   if(UI.mtab==='usr')return h+rEntre();
@@ -1464,7 +1471,8 @@ function rMercado(){
     if(flt==='usa')h+=`<div class="note" style="background:#e6efff">🇺🇸 <b>Heirloom Place</b>: corredores, yeguas, sementales y potros traídos de Estados Unidos. Son de élite (stats muy altos y el mejor techo genético), pero los precios llegan a millones de dólares. Hay corredores, ganadores de clásicos en EE.UU., yeguas de cría y sementales de élite. Son los que más valen la pena para un criadero. Las cuadras rivales también compran aquí.</div>`;
     if(G.auction.some(a=>a.lot==='sel'))h+=`<div class="note" style="background:#f3e6ff">⭐ <b>Subasta Selecta</b> (primeras semanas de la temporada): cada cuadra manda a la venta un potro de <b>su mejor yegua</b>, cruzada con el semental que escogió. Son los mejores potros del año.</div>`;
     h+=`<div class="chips">${[['all','Todos'],['usa','🇺🇸 Heirloom Place'],...(G.auction.some(a=>a.lot==='sel')?[['sel','⭐ Selecta']]:[]),...(G.auction.some(a=>a.lot==='fut')?[['fut','Futurity']]:[]),['run','Corredores'],['mare','Yeguas'],['stal','Sementales'],['foal','Recién nacidos']].map(([k,l])=>`<button class="chip ${flt===k?'on':''}" data-act="lot" data-v="${k}">${l}</button>`).join('')}</div>`;
-    h+=G.auction.filter(a=>(flt==='all'||a.lot===flt)&&(flt!=='usa'||(UI.usak||'all')==='all'||a.usaK===UI.usak)).map(a=>`<div class="card"><div class="row"><span class="dot" style="background:${COAT_HEX[a.coat]}"></span><div class="h">${esc(a.name)}</div><span class="sub">${a.sex==='H'?'♀':'♂'}</span><span class="sp"></span><b>${fmt(a.price)}</b></div>
+    h+=`<div class="chips"><span class="sub" style="align-self:center">Ordenar por precio:</span><button class="chip ${UI.asort==='asc'?'on':''}" data-act="asort" data-v="asc">Menor a mayor ↑</button><button class="chip ${UI.asort==='desc'?'on':''}" data-act="asort" data-v="desc">Mayor a menor ↓</button></div>`;
+    h+=aSort(G.auction.filter(a=>(flt==='all'||a.lot===flt)&&(flt!=='usa'||(UI.usak||'all')==='all'||a.usaK===UI.usak))).map(a=>`<div class="card"><div class="row"><span class="dot" style="background:${COAT_HEX[a.coat]}"></span><div class="h">${esc(a.name)}</div><span class="sub">${a.sex==='H'?'♀':'♂'}</span><span class="sp"></span><b>${fmt(a.price)}</b></div>
       <div class="row" style="margin:4px 0"><span class="badge ${a.lot==='stal'||a.lot==='mare'||a.lot==='sel'||a.lot==='usa'?'k':(a.lot==='foal'||a.lot==='fut')?'y':'g'}">${LOT_LABEL[a.lot]||'Corredor'}</span></div>
       <div class="sub" style="margin:2px 0 4px">${ageText(a)} · ${idealTxt(a)} · Rating ${Math.round(rating(a))}${a.si?' · SI '+a.si:''}${a.status==='retired'?` · ${a.races} carreras, ${a.wins} victorias`:''}<br>${a.usaWin?`<br>🏆 Ganador del <b>${a.usaWin}</b> (EE.UU.)`:''}<br>Consigna: ${esc(a.seller)} · Padres: ${esc(a.sireName)} × ${esc(a.damName)}</div>${statBars(a)}
       <button class="btn gold" data-act="buy" data-id="${a.id}" ${G.money<a.price?'disabled':''}>Comprar</button></div>`).join('')+'<button class="btn ghost" data-act="history">📈 Historial de precios y ventas</button>'||'<div class="empty">Sin lotes de este tipo esta semana.</div>';
@@ -2706,7 +2714,7 @@ function setupSheet(init){
   SETUP.name=nm;
   const sws=(key)=>SW.map(c=>`<button class="swb ${c===SETUP[key]?'on':''}" style="background:${c}" data-act="sw" data-k="${key}" data-v="${c}"></button>`).join('');
   openSheet(`<h3>${SETUP.first?'Bienvenido al Hipódromo Sierra Dorada':SETUP.fresh?'Nueva cuadra':'Tu cuadra'}</h3>
-   <p class="sub">${SETUP.first?'Empiezas con una yegua de cría y $50,000 USD. ':''}Elige el nombre y los colores de tu cuadra: tus jinetes los usarán en la pista.</p>
+   <p class="sub">${SETUP.first?'Empiezas con una yegua de cría y $100,000 USD. ':''}Elige el nombre y los colores de tu cuadra: tus jinetes los usarán en la pista.</p>
    <input type="text" id="sn" maxlength="26" value="${esc(nm)}" autocomplete="off" autocapitalize="words" enterkeyhint="done" style="-webkit-user-select:text;user-select:text">
    <div class="sub" style="margin:6px 0 2px">¿No puedes escribir? Toca un nombre:</div>
    <div class="row" style="gap:6px;flex-wrap:wrap">${['Cuadra Los Aztecas','Rancho La Herradura','Establos Tres Reyes','Haras El Pegaso','Cuadra Santa Elena','Rancho Los Álamos'].map(n=>`<button class="btn sm ghost" style="flex:0 0 auto" data-act="sname" data-v="${n}">${n}</button>`).join('')}</div>
@@ -3420,6 +3428,7 @@ document.addEventListener('click',e=>{
     case 'theme':{const L=['dia','atardecer','noche'];const cur=document.documentElement.dataset.theme||'dia';const nx=L[(L.indexOf(cur)+1)%3];document.documentElement.dataset.theme=nx;try{localStorage.setItem('hdm_theme',nx);}catch(e){}t.textContent='🎨 Tema: '+({dia:'Día',atardecer:'Atardecer',noche:'Noche'})[nx]+' (tocar para cambiar)';break;}
     case 'mute':G.mute=!G.mute;save();if(G.mute)crowdStop();else if(RACE&&!RACE.done){audioInit();crowdStart();}const mb=$('#rMute');if(mb)mb.textContent=G.mute?'🔇':'🔊';const m2=$('#menuMute');if(m2)m2.textContent=G.mute?'Sonido: apagado':'Sonido: encendido';break;
     case 'endrace':$('#race').classList.add('hidden');RACE=null;render();break;
+    case 'asort':UI.asort=(UI.asort===v?'':v);render();break;
     case 'mtab':UI.mtab=v;render();break;
     case 'lot':UI.lot=v;render();break;
     case 'history':historySheet();break;

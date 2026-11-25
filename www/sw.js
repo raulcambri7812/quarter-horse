@@ -1,6 +1,6 @@
 /* Service worker: la app funciona sin conexión y se actualiza sola cuando hay internet */
-const V='qhs-v1795555745';
-const SHELL=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png','peerjs.min.js'];
+const V='qh-1795564821';
+const SHELL=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png','peerjs.min.js','img/cuadra.webp','img/carreras.webp','img/crianza.webp','img/mercado.webp','img/pista.webp','img/parejeras.webp'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',e=>{
