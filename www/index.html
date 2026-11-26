@@ -272,6 +272,7 @@ function crownWin(h,k,stable,you){
 const gpWins=h=>(h.gpW&&h.gpW[curSeason()])||0;
 function gpMark(h){h.gpW=h.gpW||{};h.gpW[curSeason()]=(h.gpW[curSeason()]||0)+1;}
 const UPK=220,UPKF=170,HANDLING=350;
+const upkOf=h=>{if(h.age<8)return UPKF;const v=horseValue(h);return UPK+(isFinite(v)?Math.min(1200,Math.round(v*0.0015)):0);}; /* el mantenimiento crece con el valor del caballo */
 const VET='Daniela Levy Arochi';
 const VET_BREED=5000; // servicio veterinario en cada cruza (USD)
 const MEDS=[
@@ -724,7 +725,7 @@ const breederOf=h=>h.br==='me'?G.name:(h.br||(h.sid!=null&&G.stables[h.sid]?G.st
 const nodeOf=x=>({n:x.name,s:x.ped?x.ped.s:null,d:x.ped?x.ped.d:null});
 function trim(n,k){return(!n||k<=0)?null:{n:n.n,s:trim(n.s,k-1),d:trim(n.d,k-1)};}
 function newGame(name,colors){
-  G={siv:2,kids:{},trophies:[],staff:{T:{id:'T0',s:1},J:{id:'J0',s:1},F:{id:'F0',s:1}},nm2:1,priceIdx:[],tx:[],classics:[],sireW:{},name:name||'Cuadra Los Aztecas',colors:colors||{c1:SW[0],c2:SW[9]},money:100000,week:1,nid:1,rid:1,earnS:0,hall:[],
+  G={tut:{},siv:2,kids:{},trophies:[],staff:{T:{id:'T0',s:1},J:{id:'J0',s:1},F:{id:'F0',s:1}},nm2:1,priceIdx:[],tx:[],classics:[],sireW:{},name:name||'Cuadra Los Aztecas',colors:colors||{c1:SW[0],c2:SW[9]},money:100000,week:1,nid:1,rid:1,earnS:0,hall:[],
     horses:[],races:[],auction:[],news:[],records:{},stables:[],rivalHorses:[]};
   for(const D of DISTS)G.records[D]=Object.assign({week:0,you:false},SEED_RECORDS[D]);
   G.stables=RIVALS.map(r=>Object.assign({earn:0,wins:0},r));G.rstuds=[];ensureRLabs();
@@ -765,7 +766,9 @@ function clasicoName(D,k){
   const pool=(CLASSIC[D]||[]).concat(CLX);const di=DISTS.indexOf(D);
   return pool[(G.week*2+di*3+k*5+curSeason())%pool.length];
 }
-function genRaces(){
+const PZ=0.65; /* ajuste de economía: bolsas ordinarias ×0.65 (los Grandes Premios, clásicos del calendario, Futurity y especiales no cambian) */
+function genRaces(){const a=genRaces0();for(const r of a){if(r.tier!=='gp')r.purse=Math.round(r.purse*PZ/50)*50;}return a;}
+function genRaces0(){
   const out=[];const boost=Math.min(6,G.week*0.15);
   for(const D of DISTS)for(const tr of TIERS)for(let k=0;k<(tr.id==='gp'?2:tr.id==='clasico'?4:3);k++){
     let purse=Math.round(PURSE[D]*tr.mult/50)*50;const target=tr.lv+boost;
@@ -808,6 +811,51 @@ const SCL=[
  {w:33,n:'Clásico Herradura de Plata',D:330,g:1,p:500000},
  {w:35,n:'Copa Estrella Fugaz',D:220,g:3,p:160000,juv:1}];
 const SEL_END=5;
+/* perfil de cada cuadra rival: criadora (busca el mejor cruce), compradora (compra más en subastas) o corredora (prefiere corredores) */
+const PF={crio:['🧬','Criadora'],comp:['💰','Compradora'],corr:['🏇','Corredora']};
+const pfOf=si=>{const st=G.stables[si];if(!st)return 'corr';if(!st.pf)st.pf=['crio','comp','corr'][hs(st.name)%3];return st.pf;};
+function pickStab(kind){
+  const w=G.stables.map((_,i)=>{const p=pfOf(i);let x=1;if(p==='comp')x=2;if(kind==='stal'||kind==='mare'||kind==='share'||kind==='foal'){if(p==='crio')x*=2.5;if(p==='corr')x*=0.6;}else if(kind==='run'){if(p==='corr')x*=2.5;if(p==='crio')x*=0.6;}return x;});
+  let r=Math.random()*w.reduce((a,b)=>a+b,0);for(let i=0;i<w.length;i++){r-=w[i];if(r<=0)return i;}return 0;
+}
+/* ---------- CAJA DE LAS CUADRAS RIVALES ---------- */
+const RIVFEE=0.5,RIVUPK=1,RIVNET=0.55,RIVOH=1100; /* neto del premio tras jinete, entrenador y gastos; costo fijo semanal por caballo */
+const CASH0=st=>Math.round((350000+(hs(st.name)%8)*120000)/1000)*1000;
+const stCash=st=>{if(st.cash==null)st.cash=CASH0(st);return st.cash;};
+function pay(si,x){const st=G.stables[si];if(!st||!isFinite(x))return;stCash(st);st.cash+=x;}
+const rivUpk=h=>{const v=horseValue(h);return 190+RIVOH+(isFinite(v)?Math.min(900,Math.round(v*0.001)):0);};
+function rivalEconomy(rep){
+  /* gastos semanales y crisis */
+  G.stables.forEach((st,si)=>{
+    stCash(st);
+    const mine=G.rivalHorses.filter(h=>h.sid===si&&!h.g);
+    st.cash-=Math.round(mine.reduce((a,h)=>a+rivUpk(h),0)*RIVUPK);
+    if(st.cash<-20000){
+      const w=mine.filter(h=>!(h.ex&&h.pin>0)).sort((a,b)=>rating(a)-rating(b)).slice(0,Math.max(1,Math.ceil(mine.length*0.4)));
+      let n=0;
+      for(const h of w){if(mine.length-n<=5)break;const lot=lotFrom(h,'run',st.name);G.auction.push(lot);st.cash+=Math.round(lot.price*0.6);G.rivalHorses.splice(G.rivalHorses.indexOf(h),1);n++;}
+      st.cap=Math.max(5,(st.cap||8)-2);
+      if(n&&rep.news.length<16)rep.news.push(`📉 ${st.name} atraviesa una crisis de liquidez y vende ${n} caballo${n>1?'s':''} en la Subasta Sierra Dorada MX`);
+      if(st.cash<-20000){st.cash=120000;st.brk=(st.brk||0)+1;if(rep.news.length<16)rep.news.push(`🏦 ${st.name} cae en quiebra y es rescatada por nuevos inversionistas`);}
+    }
+  });
+  buildMap();
+  /* compras en la subasta de México por cuadras con caja */
+  let bought=0;
+  const order=G.stables.map((_,i)=>i).sort(()=>Math.random()-0.5);
+  for(const si of order){
+    if(bought>=2)break;const st=G.stables[si],pf=pfOf(si);
+    if(stCash(st)<250000)continue;
+    if(Math.random()>({comp:0.5,corr:0.35,crio:0.15})[pf])continue;
+    const mine=G.rivalHorses.filter(h=>h.sid===si&&!h.g).map(rating).sort((a,b)=>a-b),med=mine.length?mine[Math.floor(mine.length/2)]:55;
+    const c=G.auction.filter(a=>a.lot==='run'&&a.price<=st.cash*0.3&&rating(a)>=med).sort((a,b)=>rating(b)/Math.max(1,b.price)-rating(a)/Math.max(1,a.price)||rating(b)-rating(a));
+    if(c[0]&&placeRival(c[0],si,{})){st.cash-=c[0].price;G.auction=G.auction.filter(x=>x!==c[0]);bought++;if(rep.news.length<14&&Math.random()<0.7)rep.news.push(`🔨 ${st.name} compra a ${c[0].name} en la Subasta Sierra Dorada MX por ${fmt(c[0].price)}`);}
+    else if(pf==='crio'){const sl=G.auction.filter(a=>a.lot==='stal'&&a.price<=st.cash*0.35).sort((a,b)=>rating(b)-rating(a))[0];
+      if(sl){addRStud(si,sl);st.cash-=sl.price;G.auction=G.auction.filter(x=>x!==sl);bought++;if(rep.news.length<14)rep.news.push(`🐎 ${st.name} compra al semental ${sl.name} por ${fmt(sl.price)}`);}}
+  }
+  buildMap();
+}
+const pairVal=(m,x)=>{const p=predict(m,x);return(p.stats.speed+p.stats.start+p.stats.stamina)/3;};
 function genSelectLots(rep){
   const out=[];
   if(!G.stables)return out;
@@ -817,7 +865,9 @@ function genSelectLots(rep){
     const m=mares[0];if(!m)continue;
     const own=(G.rstuds||[]).filter(x=>x.sid===si).sort((a,b)=>rating(b)-rating(a))[0];
     const best=pool.filter(x=>!x.legend).sort((a,b)=>rating(b)-rating(a)).slice(0,6);
-    const sire=Math.random()<0.15?pick(LEGENDS):(own&&Math.random()<0.55)?own:pick(best.length?best:[own].filter(Boolean));
+    let sire=Math.random()<0.15?pick(LEGENDS):(own&&Math.random()<0.55)?own:pick(best.length?best:[own].filter(Boolean));
+    stCash(G.stables[si]);
+    if(pfOf(si)==='crio'){const cand=[own].concat(best).filter(x=>x&&!related(m,x)).sort((a,b)=>pairVal(m,b)-pairVal(m,a));if(cand[0])sire=cand[0];}
     if(!sire)continue;
     ensureRLabs();LABCTX=G.stables[si].lab;GENCTX=G.stables[si].gen||[];let f,cbv;try{f=breed(m,sire);cbv=labBonus('cond',sire);}finally{LABCTX=null;GENCTX=null;}
     const sex=Math.random()<.5?'H':'M';
@@ -825,6 +875,7 @@ function genSelectLots(rep){
     o.sireName=sire.name;o.damName=m.name;o.anc=f.anc;o.ped={s:{n:sire.name},d:{n:m.name}};if(cbv)o.cb=cbv;
     o.lot='sel';o.seller=G.stables[si].name;
     o.price=Math.max(3500,Math.round(horseValue(o)*2.4/50)*50);
+    pay(si,Math.round(o.price*0.7)-((sire&&sire.sid!==si&&!sire.legend)?Math.min(25000,Math.round(studFee(rating(sire),false))):0));
     out.push(o);
     if(rep&&rep.news.length<16&&out.length<=5)rep.news.push(`🌟 Subasta Selecta: ${G.stables[si].name} ofrece un potro de ${m.name} y ${sire.name}`);
   }
@@ -1007,10 +1058,10 @@ function rotateRivals(rep){
       G.rivalHorses[idx]=nh;
       if(r>=64||(h.wins||0)>=14&&r>=58){
         const lot=h.sex==='M'?'stal':'mare';
-        if(h.sex==='M')addRStud(si,h);else if(Math.random()<0.6)lots.push(lotFrom(Object.assign({},h,{age:Math.max(h.age,150)}),lot,st));
+        if(h.sex==='M')addRStud(si,h);else if(Math.random()<0.6){const L=lotFrom(Object.assign({},h,{age:Math.max(h.age,150)}),lot,st);lots.push(L);pay(h.sid,Math.round(L.price*0.7));}
         if(news<4){news++;rep.news.push(h.sex==='M'?`🐎 ${st} retira a ${h.name} como semental (${h.wins} victorias)`:`🐎 ${st} retira a ${h.name} a la cría (${h.wins} victorias)`);}
       }else{
-        lots.push(lotFrom(h,'run',st));
+        {const L=lotFrom(h,'run',st);lots.push(L);pay(h.sid,Math.round(L.price*0.7));}
         if(news<4&&Math.random()<0.6){news++;rep.news.push(`🔨 ${st} pone a la venta a ${h.name} en la Subasta Sierra Dorada MX`);}
       }
     }
@@ -1024,7 +1075,7 @@ function rotateRivals(rep){
     else if(med>0&&ls<med*0.6&&Math.random()<0.5)st.cap=Math.max(5,st.cap-1);
     else if(Math.random()<0.2)st.cap=Math.min(MAXRACERS,st.cap+1);
     let mine=G.rivalHorses.filter(h=>h.sid===si);
-    let add=0;while(mine.length<st.cap&&add<3){const nh=Object.assign(mkRival(si),{age:Math.round(rnd(104,130))});G.rivalHorses.push(nh);mine.push(nh);add++;}
+    let add=0;while(mine.length<st.cap&&add<3){const nh=Object.assign(mkRival(si),{age:Math.round(rnd(104,130))});const cost=Math.round(horseValue(nh)*0.8);if(mine.length>=5&&stCash(st)<cost+60000)break;if(mine.length>=5)st.cash-=cost;G.rivalHorses.push(nh);mine.push(nh);add++;}
     if(add&&grown<3&&rep){grown++;rep.news.push(`🏇 ${st.name} amplía su cuadra: ahora corre con ${mine.length} caballos`);}
     if(mine.length>st.cap){const w=mine.filter(h=>!(h.ex&&h.pin>0)).sort((a,b)=>rating(a)-rating(b))[0];if(w){G.rivalHorses.splice(G.rivalHorses.indexOf(w),1);lots.push(lotFrom(w,'run',st.name));}}
    }}
@@ -1495,7 +1546,7 @@ function rRancho(){
   const preg=rs.filter(x=>x.sex==='H'&&x.status==='retired'&&x.preg&&!isFoal(x));
   const foals=rs.filter(isFoal);
   const mat=[...preg,...foals];
-  const upk=rs.reduce((q,x)=>q+(x.age<8?UPKF:UPK),0);
+  const upk=rs.reduce((q,x)=>q+upkOf(x),0);
   let h=`<div class="card" style="padding:8px">${ranchSvg(stal,mares,mat)}</div>
    <div class="legend" style="font-size:11px;color:var(--muted);margin:4px 2px">🔵 semental · 🌸 yegua preñada · toca un caballo del dibujo para abrir su ficha</div>
  <button class="btn gold" data-act="labopen" style="margin-bottom:8px">🧬 Laboratorio genético · Vel ${labLv('speed')} · Arr ${labLv('start')} · Res ${labLv('stamina')} · Cond ${labLv('cond')}</button>
@@ -1511,11 +1562,20 @@ function rRancho(){
   if(foals.length)h+='<div class="title">Potros</div>'+foals.map(horseCard).join('');
   return h;
 }
+const MIS=[['b','🔨','Compra un corredor en la Subasta','mercado'],['r','🏇','Inscríbelo en una carrera','carreras'],['w','⏭️','Avanza una semana (botón Sem ▶)',null],['c','🧬','Cruza a tu yegua en Crianza','crianza'],['l','📅','Revisa el calendario de clásicos','carreras']];
+function misHTML(){
+  const T=G.tut;if(!T||T.done||T.off)return '';
+  const n=MIS.filter(m=>T[m[0]]).length;
+  return `<div class="card" style="border:1px solid var(--gold,#c9a24a)"><div class="row"><b>🎯 Primeros pasos</b><span class="sp"></span><span class="badge ${n===MIS.length?'g':'y'}">${n}/${MIS.length}</span></div>`+
+   MIS.map(m=>`<div class="row" style="margin:4px 0;gap:6px"><span>${T[m[0]]?'✅':'⬜'}</span><span style="flex:1;${T[m[0]]?'text-decoration:line-through;opacity:.6':''}">${m[1]} ${m[2]}</span>${!T[m[0]]&&m[3]?`<button class="btn sm ghost" data-act="tutgo" data-v="${m[3]}">Ir</button>`:''}</div>`).join('')+
+   `<div class="sub" style="margin-top:6px">Completa los 5 y recibes <b>$10,000</b> de bono de bienvenida.</div><button class="btn ghost sm" data-act="tutoff">Ocultar</button></div>`;
+}
+function misDone(k){const T=G&&G.tut;if(!T||T.done||T[k])return;T[k]=1;if(MIS.every(m=>T[m[0]])){T.done=1;G.money+=10000;toast('🎉 ¡Primeros pasos completos! +$10,000');}}
 function rCuadra(){
   const order={race:0,retired:1};
   const hs=G.horses.filter(h=>!inRanch(h)).sort((a,b)=>(isFoal(a)-isFoal(b))||(order[a.status]-order[b.status])||(rating(b)-rating(a)));
-  const upkeep=G.horses.reduce((s,h)=>s+(h.age<8?UPKF:UPK),0);
-  let h=`<div class="note">Gasto semanal: <b>${fmt(upkeep)} USD</b> · Corredores <b>${racersN()}/${MAXRACERS}</b> · ${G.horses.length} caballo${G.horses.length===1?'':'s'} en total. Toca un caballo para entrenar, retirar, vender o subastar. Tus yeguas, sementales y potros viven en el <b>🏡 Rancho</b>.</div>`;
+  const upkeep=G.horses.reduce((s,h)=>s+upkOf(h),0);
+  let h=misHTML()+`<div class="note">Gasto semanal: <b>${fmt(upkeep)} USD</b> · Corredores <b>${racersN()}/${MAXRACERS}</b> · ${G.horses.length} caballo${G.horses.length===1?'':'s'} en total. Toca un caballo para entrenar, retirar, vender o subastar. Tus yeguas, sementales y potros viven en el <b>🏡 Rancho</b>.</div>`;
   {const ij=G.horses.filter(x=>x.inj);h+=`<div class="card" style="background:${ij.length?'#fde9e4':'#eaf3ea'};border:1px solid ${ij.length?'#e0a99d':'#b9d6b9'}"><div class="row"><b>🏥 Clínica veterinaria</b><span class="sp"></span><span class="badge ${ij.length?'r':'g'}">${ij.length?ij.length+' lesionado'+(ij.length>1?'s':''):'todos sanos'}</span></div>${ij.length?ij.map(x=>`<div class="kv"><span>🩹 ${esc(x.name)}</span><b>${esc((injOf(x)||{}).name||'Lesión')} · ${x.inj.wk} sem</b></div>`).join(''):'<div class="sub">Ningún caballo lesionado.</div>'}<button class="btn gold" style="margin-top:8px" data-act="clinic">Abrir clínica · tratamiento y cirugía</button></div>`;}
   h+=`<button class="btn ghost" data-act="clinic">🏥 Clínica veterinaria${G.horses.some(x=>x.inj)?' · '+G.horses.filter(x=>x.inj).length+' lesionado(s)':''}</button>`;
   const nr=G.horses.filter(inRanch).length;if(nr)h+=`<button class="btn ghost" data-act="tab" data-v="rancho">🏡 Ir a ${esc(ranchName())} · ${nr} en el rancho</button>`;
@@ -1683,9 +1743,11 @@ function rMercado(){
     {const op=G.rstuds.filter(x=>x.synOpen&&!(G.myShares&&G.myShares[x.id])).sort((a,b)=>rating(b)-rating(a));
      h+=`<div class="title">🤝 Sementales en sindicación</div><div class="sub">Sus dueños deciden si sindicalizan y a qué precio ponen cada parte (25%). Quien compra una parte cría 2 potros por temporada sin costo y los demás a mitad de precio.</div>`;
      h+=op.length?op.map(x=>`<div class="card ph2">${phImg('semental',x.coat)}<div class="row"><span class="dot" style="background:${COAT_HEX[x.coat]}"></span><div class="h">${flg(x)} ${esc(x.name)}</div><span class="sp"></span><b>${fmt(x.synPrice||synPrice(x))}</b></div><div class="sub">${esc(G.stables[x.sid].name)} · Rating ${Math.round(rating(x))} · ideal ${dRound(x.dist)} yd · ${x.wins} victorias · socios: ${(x.syn||[]).map(i=>esc(G.stables[i].name)).join(', ')}</div><button class="btn gold" style="margin-top:4px" data-act="buyshare" data-id="${x.id}">Comprar 25% · precio fijado por ${esc(G.stables[x.sid].name)}</button></div>`).join(''):'<div class="sub" style="margin:6px 0">Por ahora ningún dueño ofrece partes. Revisa cada semana.</div>';}
+    {const cs=G.stables.map((x,i)=>({n:x.name,c:stCash(x)})).sort((a,b)=>b.c-a.c);
+     h+=`<div class="note">💰 Cuadra más fuerte: <b>${esc(cs[0].n)}</b> (${fmt(Math.round(cs[0].c/1000)*1000)}) · En apuros: <b>${esc(cs[cs.length-1].n)}</b> (${fmt(Math.round(cs[cs.length-1].c/1000)*1000)}). Las cuadras con caja compran más en las subastas; las que se quedan sin fondos venden caballos o quiebran.</div>`;}
     G.stables.forEach((st,si)=>{
       const ls=G.rstuds.filter(x=>x.sid===si).sort((a,b)=>rating(b)-rating(a));
-      h+=`<div class="title">${silk(st.c1,st.c2)} ${esc(st.name)}</div>`;
+      h+=`<div class="title">${silk(st.c1,st.c2)} ${esc(st.name)} <span class="badge k">${PF[pfOf(si)][0]} ${PF[pfOf(si)][1]}</span> <span class="badge ${stCash(st)<80000?'r':'g'}">💵 ${fmt(Math.round(stCash(st)/1000)*1000)}</span>${st.brk?` <span class="badge y">🏦 ×${st.brk}</span>`:''}</div>`;
       if(!ls.length)h+='<div class="sub">Sin sementales por ahora.</div>';
       h+=ls.map(s=>{const sold=(s.bk||0)>=RS_CAP;const mi=G.myShares&&G.myShares[s.id];return `<div class="card ph2">${phImg('semental',s.coat)}<div class="row"><span class="dot" style="background:${COAT_HEX[s.coat]}"></span><div class="h">${flg(s)} ${esc(s.name)}</div>${s.syn?'<span class="badge k">🤝 Sindicato</span>':''}<span class="sp"></span><b>${fmt(sireCost(s))}</b></div>
         <div class="sub" style="margin:2px 0 4px">Ideal ${dRound(s.dist)} yd · Rating ${Math.round(rating(s))} · SI ${siShow(s)} · ${s.wins} victorias · demanda <b>${rsDemand(s)}</b> (${s.bk||0}/${RS_CAP} yeguas) · + ${fmt(VET_BREED)} veterinario</div>${statBars(s)}
@@ -1943,6 +2005,7 @@ function awardRival(h,place,r,T,N){
   h.lw=G.week;if(!h.g)h.rest=restWeeks(h,r)+1;
   if(r.tier==='claim')h.clm=curSeason();
   const prize=Math.round(r.purse*SHARE[place]);
+  if(!h.g)pay(h.sid,Math.round(prize*RIVNET)-Math.round((r.fee||0)*RIVFEE));
   if(h.ex&&G.out&&G.out[h.name]){const e=G.out[h.name];e.st=G.stables[h.sid].name;e.r++;e.e+=prize;if(place===0){e.w++;if(r.tier==='gp')e.gp++;}
     if(e.ss!==curSeason()){e.ss=curSeason();e.es=0;}e.es+=prize;
     e.log.unshift({s:curSeason(),w:swk(),race:r.name.split(' · ')[0],D:r.D,p:place+1,n:N||0,T:T||0});e.log=e.log.slice(0,8);
@@ -2030,7 +2093,7 @@ function startRace(rid,hid,hid2){
   const nE=h2?2:1;
   if(!r||!h||r.ran||G.money<r.fee*nE||!eligible(h)||!rOK(r,h)||(r.fut&&!(h.fut&&h.wins>0))||(r.cc&&gpWins(h)<2)||(r.aaf&&!fqOk(h,r.fk))||(r.aafq&&!(h.age<=AAF.MAXAGE&&!fqOk(h,r.fk))))return;
   if(h2&&(!pairOK(r)||!entryOK(r,h2)))return;
-  G.money-=r.fee*nE;r.ran=true;
+  G.money-=r.fee*nE;r.ran=true;misDone('r');
   h.cond=clamp(h.cond-(20+r.D/30),0,100);if(h2)h2.cond=clamp(h2.cond-(20+r.D/30),0,100);
   const tr=TIERS.find(t=>t.id===r.tier);
   const dk1=h.dopeId?DRUGS.find(x=>x.id===h.dopeId):null,dk2=h2&&h2.dopeId?DRUGS.find(x=>x.id===h2.dopeId):null;
@@ -2658,11 +2721,11 @@ function doBreed(){
   if(racersN()>=MAXRACERS){toast('Tu cuadra ya tiene '+MAXRACERS+' corredores (potros incluidos). Vende o retira alguno antes de criar');return;}
   if(s.rs&&(s.bk||0)>=RS_CAP){toast(s.name+' ya agotó sus servicios de la temporada');return;}
   const cost=sireCost(s)+VET_BREED;if(G.money<cost){toast('No te alcanza el dinero');return;}
-  G.money-=cost;if(s.rs)s.bk=(s.bk||0)+1;{const u=synUse(s);if(u)u.un++;}
+  G.money-=cost;if(s.rs){pay(s.sid,cost);s.bk=(s.bk||0)+1;}{const u=synUse(s);if(u)u.un++;}
   m.preg={weeks:4,sire:{id:s.id,name:s.name,speed:s.speed,start:s.start,stamina:s.stamina,dist:s.dist,coat:s.coat}};
   if(G.horses.some(x=>x.id===s.id)){s.book=s.book||[];s.book.unshift({w:G.week,season:curSeason(),mareId:m.id,mare:m.name,foal:null,foalId:null});s.book=s.book.slice(0,80);}
   UI.mare=null;UI.sire=null;
-  save();render();toast(`${m.name} quedó preñada. Nace en 4 semanas.`);
+  save();render();misDone('c');toast(`${m.name} quedó preñada. Nace en 4 semanas.`);
 }
 function makeFoal(m){const f=makeFoal0(m);const g=genActive();if(g.length)f.gl=g.map(l=>l.name);return f;}
 function makeFoal0(m){
@@ -2731,9 +2794,10 @@ function weekReport(){
     else if(!x.sus&&Math.random()<0.06){const k=pick(['speed','start','stamina']);if(x[k]<95)x[k]+=1;} // programa de entrenamiento
   });
   ensureRStuds();
+  rivalEconomy(rep);
   (G.rstuds||[]).forEach(x=>{
     const lam=clamp((rating(x)-40)/50,0.1,0.95);
-    if(Math.random()<lam&&(x.bk||0)<RS_CAP)x.bk=(x.bk||0)+1;
+    if(Math.random()<lam&&(x.bk||0)<RS_CAP){pay(x.sid,Math.round(rsFee(x)*0.85));x.bk=(x.bk||0)+1;}
     if((x.bk||0)>=RS_CAP&&!x.sold){x.sold=true;rep.news.push(`🐎 ${x.name} (${G.stables[x.sid].name}) agotó su cupo de servicios de la temporada`);}
   });
   G.week++;
@@ -2752,7 +2816,7 @@ function weekReport(){
     /* cada temporada equivale a un año: 40 semanas de juego + 12 de ajuste = 52 */
     rep.news.push('🎂 Termina la temporada '+closed+': todos los caballos cumplen un año más');G.horses.forEach(h=>{if(h.age>=8)h.age+=12;});G.rivalHorses.forEach(h=>{if(h.age>=8)h.age+=12;});(G.guests||[]).forEach(h=>{h.age+=12;});
     rep.news.push('🎂 Empieza una nueva temporada: todos los caballos cumplen un año más');
-    G.stables.forEach(x=>{x.lastS=x.earnS||0;x.earnS=0;x.raceS=0;x.winS=0;});G.raceS=0;G.winS=0;G.rivalHorses.forEach(x=>{x.earnS=0;});G.horses.forEach(x=>{x.earnS=0;});G.earnS=0;
+    G.stables.forEach(x=>{if(stCash(x)>2000000)x.cash-=Math.round((x.cash-2000000)*0.5/1000)*1000; /* dividendos a los socios */ x.lastS=x.earnS||0;x.earnS=0;x.raceS=0;x.winS=0;});G.raceS=0;G.winS=0;G.rivalHorses.forEach(x=>{x.earnS=0;});G.horses.forEach(x=>{x.earnS=0;});G.earnS=0;
   }
   const born=[];
   for(const h of G.horses){
@@ -2761,7 +2825,7 @@ function weekReport(){
     h.age++;if(h.age===8)h.age=104;h.medBoost=0;
     h.cond=h.status==='race'?Math.min(100,h.cond+25+Math.round((staffOf('T').sk-50)/10)):100;
     if(h.shoe&&h.shoe.wk>0&&h.status==='race')h.shoe.wk--;
-    rep.upkeep+=h.age<8?UPKF:UPK;
+    rep.upkeep+=upkOf(h);
     if(h.rest>0)h.rest--;
     if(h.preg){h.preg.weeks--;if(h.preg.weeks<=0){born.push({m:h,f:makeFoal(h)});h.preg=null;h.rest=2;}}
     if(h.syn&&h.status==='retired'&&h.sex==='M'){
@@ -2856,16 +2920,18 @@ function weekReport(){
   /* los rivales también venden caballos en la Heritage Place de EE.UU. */
   if(Math.random()<0.35){const c=G.rivalHorses.map((h,i)=>({h,i})).filter(o=>!o.h.g&&!o.h.ex&&!(o.h.pin>0)&&rating(o.h)>=68);
     if(c.length){const o=pick(c),h=o.h,price=Math.round(horseValue(h)*rnd(1.1,1.4)/50)*50;
-      if(rep.news.length<18)rep.news.push(`🇺🇸 ${G.stables[h.sid].name} vendió a ${h.name} en la Heritage Place USA por ${fmt(price)} (comprador: ${pick(SELLERS_USA)})`);
+      pay(h.sid,price);if(rep.news.length<18)rep.news.push(`🇺🇸 ${G.stables[h.sid].name} vendió a ${h.name} en la Heritage Place USA por ${fmt(price)} (comprador: ${pick(SELLERS_USA)})`);
       G.rivalHorses[o.i]=Object.assign(mkRival(h.sid),{age:104});buildMap();}}
   /* las cuadras rivales también compran en la Heritage Place */
   {const up=G.auction.filter(a=>a.lot==='usa');
    const buys=Math.min(up.length,Math.random()<0.8?(Math.random()<0.4?2:1):0);
-   for(let q=0;q<buys;q++){const lot=up.splice(Math.floor(Math.random()*up.length),1)[0];const si=Math.floor(Math.random()*G.stables.length),stn=G.stables[si].name;
+   for(let q=0;q<buys;q++){const lot=up.splice(Math.floor(Math.random()*up.length),1)[0];const si=pickStab(lot.usaK),stn=G.stables[si].name;
+     if(stCash(G.stables[si])<lot.price*(lot.usaK==='share'?1:1.15)+50000)continue;
      let ok=false;
      if(lot.usaK==='share'){const own=(si+1+Math.floor(Math.random()*(G.stables.length-1)))%G.stables.length;addRStud(own,lot);
        const x=G.rstuds.filter(q=>q.sid===own&&q.name===lot.name)[0];if(x){const th=G.stables.map((_,i)=>i).filter(i=>i!==own&&i!==si)[0];x.syn=[own,si,th];x.synOpen=Math.random()<0.5;x.synPrice=lot.price;x.usa=1;}ok=!!x;}
      else if(lot.usaK==='stal'){addRStud(si,lot);ok=true;rivalSyndicate(si,lot,rep);}else if(lot.usaK==='mare')ok=true;else if((G.usaRun||0)<4){ok=placeRival(lot,si,{usa:1});if(ok)G.usaRun=(G.usaRun||0)+1;}
+     if(ok)G.stables[si].cash-=lot.price;
      if(ok&&rep.news.length<16)rep.news.push(`🇺🇸 ${stn} compró en la Heritage Place ${lot.usaK==='share'?'una parte (25%) del semental':lot.usaK==='stal'?'al semental':lot.usaK==='mare'?'a la yegua de cría':lot.usaK==='foal'?'al potro':'a'} ${lot.name} por ${fmt(lot.price)}`);}}
   /* cada semana algún dueño decide por su cuenta sindicalizar un semental */
   if(Math.random()<0.25&&G.rstuds&&G.rstuds.length){const c=G.rstuds.filter(x=>!x.legend&&!x.synOpen&&!(G.myShares&&G.myShares[x.id]));
@@ -2873,7 +2939,7 @@ function weekReport(){
       if(rep.news.length<16)rep.news.push(`🤝 ${G.stables[x.sid].name} ofrece una parte (25%) de ${x.name} en ${fmt(x.synPrice)}`);}}
   /* Fomento a criaderos locales: apoyo del 25% para que compren sementales top de la Heritage Place */
   {const tops=G.auction.filter(a=>a.lot==='usa'&&a.usaK==='stal');
-   tops.forEach(lot=>{if(Math.random()<0.18){const si=Math.floor(Math.random()*G.stables.length);addRStud(si,lot);G.auction=G.auction.filter(x=>x!==lot);rivalSyndicate(si,lot,rep,Math.round(lot.price*0.75/50)*50);}});}
+   tops.forEach(lot=>{if(Math.random()<0.18){const si=pickStab('stal'),pp=Math.round(lot.price*0.25/50)*50;if(stCash(G.stables[si])<pp+80000)return;G.stables[si].cash-=pp;addRStud(si,lot);G.auction=G.auction.filter(x=>x!==lot);rivalSyndicate(si,lot,rep,Math.round(lot.price*0.75/50)*50);}});}
   G.races=genRaces();G.auction=genAuction().concat(extra,prevFut,genUSALots());snapPrices();
   {const inF=new Set();G.races.forEach(r=>r.field.forEach(id=>inF.add(id)));G.guests=(G.guests||[]).filter(g=>(g.rs||0)<MAXRS||inF.has(g.id));}
   if(swk()%3===0){
@@ -2987,12 +3053,14 @@ function formulaSheet(){
   <div class="formula">g = |ln(distSemental / distYegua)| / ln 4      (0 = igual, 1 = 110 vs 440)
 
 Bono   = 5·e^(−((g−0.15)/0.3)²) − 4·máx(0, g−0.55)/0.45
-Sigma  = 3 + 7·g            (variación del potro)
+Sigma  = (5 + 7·g + 0.1·máx(0, prom−70)) · (1 + 0.8·(1−vigor))
 
-Distancia potro = e^( (ln dS + ln dY)/2 + ruido )
-Stat potro = prom + 0.12·(60 − prom) + Bono + ruido(Sigma)
+Herencia = 40% semental + 40% yegua + 20% línea ancestral
+Regresión = 0.12 + 0.009·máx(0, h−72) + 0.01·máx(0, h−85)
+Stat potro = h + Regresión·(60 − h) + Bono + nick − 12·(1−vigor) + tirada
 
-Ajuste: si el potro sale más largo que el promedio de sus padres, gana Resistencia y pierde Arranque (y al revés).</div>
+Tirada genética (todo el potro): 18% descalabro, 6% joya, el resto normal.
+Vigor por edad: 100% hasta 11 años, 88% a 14, 68% a 18, 48% a 22.</div>
   <p class="sub"><b>Resumen:</b> cruzar padres con distancias parecidas pero no idénticas (g ≈ 0.15) da el mayor bono y poca variación. Cruzar un velocista de 110 con un fondista de 440 da un potro impredecible y con penalización.</p>
   <p class="sub">En carrera, cada atributo pesa según la distancia: corta = Arranque, larga = Resistencia. Además, el rating se castiga si corres lejos de la distancia ideal.</p>
   <button class="btn gold" data-act="close">Entendido</button>`);
@@ -3013,6 +3081,27 @@ function tutSheet(i){i=Math.max(0,Math.min(TUT.length-1,+i||0));const q=TUT[i];
   ${q.go?`<button class="btn gold" data-act="tutgo" data-v="${q.go}">${q.gl}</button>`:''}
   <div class="row" style="gap:6px">${i>0?`<button class="btn ghost" style="flex:1" data-act="tut" data-v="${i-1}">◀ Atrás</button>`:''}${i<TUT.length-1?`<button class="btn" style="flex:1" data-act="tut" data-v="${i+1}">Siguiente ▶</button>`:`<button class="btn" style="flex:1" data-act="tutend">¡A jugar!</button>`}</div>
   <button class="btn ghost" data-act="tutend">Cerrar tutorial</button>`);}
+const SAVE_TAG='QHS1:';
+function saveCode(){return SAVE_TAG+btoa(unescape(encodeURIComponent(JSON.stringify(G))));}
+function parseCode(t){
+  t=String(t||'').replace(/\s+/g,'');if(!t)return null;
+  try{if(t.indexOf(SAVE_TAG)===0)t=decodeURIComponent(escape(atob(t.slice(SAVE_TAG.length))));const o=JSON.parse(t);
+    return(o&&Array.isArray(o.horses)&&Array.isArray(o.stables)&&typeof o.money==='number'&&typeof o.week==='number')?o:null;}catch(e){return null;}
+}
+function expoSheet(){
+  openSheet(`<h3>💾 Exportar partida</h3><p class="sub">Copia este código y guárdalo (notas, WhatsApp, correo). Para recuperar tu partida, o pasarla a otro teléfono, usa <b>Importar partida</b> y pega el código.</p>
+  <textarea id="expc" readonly style="width:100%;height:120px;font-size:11px;border-radius:8px;padding:6px;box-sizing:border-box">${saveCode()}</textarea>
+  <button class="btn gold" data-act="expcopy">📋 Copiar código</button>
+  <button class="btn ghost" data-act="expdl">⬇️ Descargar archivo</button>
+  <button class="btn ghost" data-act="close">Cerrar</button>`);
+}
+function impoSheet(msg){
+  openSheet(`<h3>📥 Importar partida</h3><p class="sub">Pega aquí el código que exportaste. <b>Reemplazará tu partida actual</b>; si dudas, primero exporta la actual.</p>
+  <textarea id="impc" placeholder="QHS1:..." style="width:100%;height:120px;font-size:11px;border-radius:8px;padding:6px;box-sizing:border-box"></textarea>
+  ${msg?`<div class="warn" style="margin:6px 0">${msg}</div>`:''}
+  <button class="btn gold" data-act="impok">Revisar código</button>
+  <button class="btn ghost" data-act="close">Cancelar</button>`);
+}
 function helpSheet(){
   openSheet(`<h3>Cómo se juega</h3>
   <p class="sub">1) Empiezas solo con una yegua de cría. Compra corredores en <b>Subasta Sierra Dorada MX</b> o cruza a tu yegua con un semental.<br>2) Inscribe a tus caballos en carreras de 110 a 440 yd contra las cuadras rivales: <b>Maiden</b> (solo caballos sin victorias), <b>Allowance</b> y <b>Clásicos</b>, que llevan el nombre de las leyendas y se corren a su distancia. Gana bolsa según tu lugar y busca romper el <b>récord de pista</b>.<br>3) Entrena atributos (cuesta dinero y condición).<br>4) <b>Retira</b> a tus mejores caballos: los machos pasan a semental (puedes ofrecerlos al servicio de otras cuadras y cobrar) y las yeguas a cría.<br>5) El año se divide en <b>temporadas de 40 semanas</b>: al terminar se corona a la cuadra campeona (bono de $10,000 si eres tú) y al caballo del año.<br>5b) El <b>veterinario</b> cobra US$5,000 por cada cruza y, para caballos en competencia, aplica sueros y suplementos (Básico, Intermedio o Premium) que recuperan condición.<br>6) Puedes vender ya (80%) o <b>subastar</b> tus caballos en la Subasta Sierra Dorada MX por un precio incierto.<br>7) Avanza la semana con <b>Sem ▶</b>: pagas mantenimiento, nacen los potros y las cuadras rivales siguen compitiendo.</p>
@@ -3020,6 +3109,8 @@ function helpSheet(){
   <button class="btn ghost" data-act="theme">🎨 Tema: ${({dia:'Día',atardecer:'Atardecer',noche:'Noche'})[document.documentElement.dataset.theme]||'Día'} (tocar para cambiar)</button>
   <button class="btn ghost" id="menuMute" data-act="mute">${G.mute?'Sonido: apagado':'Sonido: encendido'}</button>
   <button class="btn ghost" data-act="setup">Nombre y colores de la cuadra</button>
+  <button class="btn ghost" data-act="expo">💾 Exportar partida (respaldo)</button>
+  <button class="btn ghost" data-act="impo">📥 Importar partida</button>
   <button class="btn ghost" data-act="formula">Ver fórmula de cruza</button>
   <button class="btn ghost" data-act="newgame">Empezar de nuevo</button>
   <button class="btn gold" data-act="close">Cerrar</button>`);
@@ -3736,7 +3827,7 @@ document.addEventListener('click',e=>{
     case 'svsel':case 'svhost':case 'svjoin':case 'svleave':case 'svbuy':case 'svshare':case 'svcopy':case 'svpaste':case 'svpay':case 'svcancelp':svAction(a,t);break;
     case 'pjenter':case 'pjd0':case 'pjhost':case 'pjjoin':case 'pjleave':case 'pjdist':case 'pjhorse':case 'pjdrug':case 'pjbet':case 'pjready':case 'pjshare':case 'pjcopy':case 'pjpaste':pjAction(a,t);break;
     case 'tab':UI.tab=v;render();break;
-    case 'calcl':openSheet(calClassics());break;
+    case 'calcl':misDone('l');openSheet(calClassics());break;
     case 'ranchname':{const n=(($('#ranchn')&&$('#ranchn').value)||'').trim();if(n){G.ranch=n.slice(0,26);save();render();toast('Nombre del rancho guardado');}break;}
     case 'close':if(t.classList.contains('sheet-bg')&&SETUP.first&&!SETUP.done)break;closeSheet();break;
     case 'horse':showHorse(id);break;
@@ -3749,6 +3840,15 @@ document.addEventListener('click',e=>{
     case 'rzoom':{G.tz=Math.round(Math.max(0.5,Math.min(1,(G.tz||0.9)+0.1*(+v)))*10)/10;save();if(RACE){applyTZ();sizeRace();drawRace(RACE.lt||0);}toast('Tamaño de pista '+Math.round(G.tz*100)+'%');break;}
     case 'skip':if(RACE)RACE.skip=true;break;
     case 'tut':tutSheet(v);break;
+    case 'expo':expoSheet();break;
+    case 'expcopy':{const ta=$('#expc');if(!ta)break;ta.select();let ok=false;try{ok=document.execCommand('copy');}catch(e){}
+      if(!ok&&navigator.clipboard){navigator.clipboard.writeText(ta.value).then(()=>toast('Código copiado ✔'),()=>toast('Mantén presionado el texto para copiarlo'));}else toast(ok?'Código copiado ✔':'Mantén presionado el texto para copiarlo');break;}
+    case 'expdl':{try{const b=new Blob([saveCode()],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='quarter-horse-partida.txt';document.body.appendChild(a);a.click();a.remove();toast('Archivo generado');}catch(e){toast('No se pudo descargar: copia el código');}break;}
+    case 'impo':impoSheet();break;
+    case 'impok':{const o=parseCode(($('#impc')||{}).value);if(!o){impoSheet('El código no es válido o está incompleto.');break;}
+      window.__imp=o;openSheet(`<h3>¿Reemplazar tu partida?</h3><p class="sub">Partida a importar: <b>${esc(o.name||'Cuadra')}</b> · Temporada ${Math.floor((o.week-1)/SEASON_WEEKS)+1} · ${o.horses.length} caballos · ${fmt(o.money)}.<br>Tu partida actual se perderá.</p><button class="btn red" data-act="impgo">Sí, importar</button><button class="btn ghost" data-act="close">Cancelar</button>`);break;}
+    case 'impgo':{if(!window.__imp)break;try{localStorage.setItem(KEY,JSON.stringify(window.__imp));}catch(e){toast('No se pudo guardar');break;}location.reload();break;}
+    case 'tutoff':if(G.tut)G.tut.off=1;save();render();break;
     case 'tutend':try{localStorage.setItem('hdm_tut','1');}catch(e){}closeSheet();break;
     case 'tutgo':{try{localStorage.setItem('hdm_tut','1');}catch(e){}closeSheet();if(v==='lab'){labSheet();}else{UI.tab=v;render();toast('Puedes volver al tutorial desde el menú ⋯');}break;}
     case 'theme':{const L=['dia','atardecer','noche'];const cur=document.documentElement.dataset.theme||'dia';const nx=L[(L.indexOf(cur)+1)%3];document.documentElement.dataset.theme=nx;try{localStorage.setItem('hdm_theme',nx);}catch(e){}t.textContent='🎨 Tema: '+({dia:'Día',atardecer:'Atardecer',noche:'Noche'})[nx]+' (tocar para cambiar)';break;}
@@ -3844,7 +3944,7 @@ document.addEventListener('click',e=>{
       else{G.name=n;G.colors={c1:SETUP.c1,c2:SETUP.c2};save();}
       SETUP.first=false;SETUP.done=true;closeSheet();render();toast('Cuadra: '+n);try{if(!localStorage.getItem('hdm_tut'))setTimeout(()=>tutSheet(0),350);}catch(e){}break;}
     case 'newgame':setupSheet({fresh:true,name:'Cuadra Los Aztecas'});break;
-    case 'week':{const rep=weekReport();render();showReport(rep);break;}
+    case 'week':{misDone('w');const rep=weekReport();render();showReport(rep);break;}
     case 'train':{const h=H(id),k=t.dataset.k;const c=trainCost(h,k);if(G.money<c||h.cond<30)break;
       const tired=h.cond<45&&Math.random()<0.25;G.money-=c;h.cond-=15;const gain=Math.max(1,Math.round(1+Math.random()*2*(1-h[k]/105)))+(Math.random()<Math.max(0,staffOf('T').sk-50)/100?1:0);h[k]=Math.min(99,h[k]+gain);
       if(tired){const L=statLoss(h,[0.02,0.04]);save();render();showHorse(id);toast(`💢 Exceso de trabajo: −${L.n} ${STL[L.k]}`);break;}
@@ -3865,7 +3965,7 @@ document.addEventListener('click',e=>{
     case 'listok':{const h=H(id);if(!h||h.syn)break;const v0=horseValue(h);const a=Math.max(Math.round(v0*0.5/50)*50,Math.round((+($('#lp')||{}).value||v0)/50)*50);
       h.ask=a;h.askUSA=t.dataset.usa==='1';h.listed=true;if(UI.mare===id)UI.mare=null;if(UI.sire===id)UI.sire=null;save();render();closeSheet();toast(`${h.name} entra a la ${h.askUSA?'Heritage Place USA':'subasta'} en ${fmt(a)}. Se resuelve al avanzar la semana.`);break;}
     case 'unlist':{const h=H(id);h.listed=false;h.ask=0;h.askUSA=false;save();render();closeSheet();toast('Retirado de la subasta');break;}
-    case 'buy':{const a=G.auction.find(x=>x.id===id);if(!a||G.money<a.price)break;
+    case 'buy':{const a=G.auction.find(x=>x.id===id);if(!a||G.money<a.price)break;misDone('b');
       if(a.status==='race'&&!a.usaK&&racersN()>=MAXRACERS){toast('Tu cuadra ya tiene '+MAXRACERS+' corredores. Vende, dona o retira alguno primero');break;}
       if(a.usaK==='share'){const si=Math.floor(Math.random()*G.stables.length);addRStud(si,a);const x=G.rstuds.filter(q=>q.sid===si&&q.name===a.name)[0];
         if(!x){toast('No se pudo cerrar la compra');break;}
@@ -3884,7 +3984,7 @@ document.addEventListener('keydown',e=>{
    ARRANQUE
    ============================================================ */
 G=load();
-if(G&&G.horses&&G.stables){G.earnS=G.earnS||0;G.ranch=G.ranch||'Rancho Los Potreros';G.hall=G.hall||[];G.priceIdx=G.priceIdx||[];G.tx=G.tx||[];G.classics=G.classics||[];G.sireW=G.sireW||{};G.kids=G.kids||{};G.trophies=G.trophies||[];G.crowns=G.crowns||[];[G.horses,G.rivalHorses].forEach(a=>a.forEach(h=>{if(h.aafQ&&!h.fq)h.fq={aaf:h.aafQ};}));G.rstuds=G.rstuds||[];G.horses.forEach(h=>{if(!h.br&&h.damId)h.br='me';});if(!G.staff)G.staff={T:{id:'T0',s:1},J:{id:'J0',s:1},F:{id:'F0',s:1}};while(G.stables.length<RIVALS.length){const si=G.stables.length;G.stables.push(Object.assign({earn:0,wins:0},RIVALS[si]));for(let k=0;k<8;k++)G.rivalHorses.push(mkRival(si));}if(!G.nm2){const old=new Set((G.horses||[]).map(x=>x.name));G.nm2=1;const ctx=nameCtx();
+if(G&&G.horses&&G.stables){if(!G.tut)G.tut={done:1};G.earnS=G.earnS||0;G.ranch=G.ranch||'Rancho Los Potreros';G.hall=G.hall||[];G.priceIdx=G.priceIdx||[];G.tx=G.tx||[];G.classics=G.classics||[];G.sireW=G.sireW||{};G.kids=G.kids||{};G.trophies=G.trophies||[];G.crowns=G.crowns||[];[G.horses,G.rivalHorses].forEach(a=>a.forEach(h=>{if(h.aafQ&&!h.fq)h.fq={aaf:h.aafQ};}));G.rstuds=G.rstuds||[];G.horses.forEach(h=>{if(!h.br&&h.damId)h.br='me';});if(!G.staff)G.staff={T:{id:'T0',s:1},J:{id:'J0',s:1},F:{id:'F0',s:1}};while(G.stables.length<RIVALS.length){const si=G.stables.length;G.stables.push(Object.assign({earn:0,wins:0},RIVALS[si]));for(let k=0;k<8;k++)G.rivalHorses.push(mkRival(si));}if(!G.nm2){const old=new Set((G.horses||[]).map(x=>x.name));G.nm2=1;const ctx=nameCtx();
   [G.rivalHorses,G.auction].forEach(a=>(a||[]).forEach(h=>{ctx.u.delete((h.name||'').toLowerCase());}));
   [G.rivalHorses,G.auction].forEach(a=>(a||[]).forEach(h=>{h.name=genName(h.sex,false,ctx);}));}
 G.rivalHorses.forEach(h=>{if(!h.damName)h.damName=genName('H',true);});G.rivalHorses.forEach(h=>{if(!h.sireName)h.sireName=Math.random()<0.5?pick(allSireNames()):genName('M');});[G.horses,G.rivalHorses,G.auction].forEach(a=>(a||[]).forEach(h=>{h.dist=snapDist(h.dist);}));G.records=G.records||{};for(const D of DISTS)if(!G.records[D])G.records[D]=Object.assign({week:0,you:false},SEED_RECORDS[D]);G.out=G.out||{};G.rivalHorses.forEach(h=>{if(h.ex&&h.exFrom===G.name&&!G.out[h.name])G.out[h.name]={n:h.name,sx:h.sex,st:G.stables[h.sid].name,w0:G.week,s0:curSeason(),bred:h.br==='me'?1:0,r:0,w:0,e:0,gp:0,es:0,ss:curSeason(),log:[],sire:h.sireName||'—',dam:h.damName||'—'};});applyStaffFees();buildMap();ensureRStuds();
