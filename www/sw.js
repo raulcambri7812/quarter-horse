@@ -1,5 +1,5 @@
 /* Service worker: la app funciona sin conexión y se actualiza sola cuando hay internet */
-const V='v30-1795680197';
+const V='v32-1795711230';
 const SHELL=['./','index.html','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png','peerjs.min.js','img/cuadra.webp','img/carreras.webp','img/crianza.webp','img/mercado.webp','img/pista.webp','img/parejeras.webp','img/pista_carrera.webp','img/foto_cuadra.webp','img/foto_semental.webp','img/foto_ganador.webp','img/foto_semental_tordillo.webp','img/foto_semental_alazan.webp','img/foto_semental_negro.webp','img/foto_yegua_palomino.webp','img/foto_potro_tordillo.webp','img/foto_potro_bayo.webp','img/foto_yegua.webp','img/foto_potro.webp','img/foto_venta.webp','img/mask_semental.png','img/mask_semental_b.png','img/mask_venta.png','img/mask_yegua.png','img/mask_potro.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});

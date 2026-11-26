@@ -678,7 +678,7 @@ let RHM={};
 let UI={tab:'cuadra',dist:440,mtab:'sub',stype:'mkt',mare:null,sire:null};
 const $=s=>document.querySelector(s);
 function save(){try{localStorage.setItem(KEY,JSON.stringify(G));}catch(e){}}
-const NAME_MAP=[[/All American(?!s)/g,'All Americas'],[/Dash For Cash/g,'Dash For Coin'],[/Rainbow Futurity/g,'Futurity Sierra Madre'],[/Tale of the Wind/g,'Cuento del Viento'],[/AQHA/g,'ACM'],[/First Down Dash/g,'First Round Dash'],[/Kiss My Hocks/g,'Kiss My Heels'],[/Go Man Go/g,'Go Mano Go'],[/Easy Jet/g,'Easy Jolt'],[/Corona Cartel/g,'Corona Carmesí'],[/Beduino/g,'Bedoyo'],[/Zevi(?!\w)/g,'Zevo'],[/Power Jam/g,'Power Jem'],[/Three Bars/g,'Three Beams'],[/Top Deck/g,'Top Dock'],[/Favorite Trick/g,'Favorite Treat'],[/Hennessy/g,'Henley'],[/Favorite Cartel/g,'Favorite Cadet'],[/Apollitical Jess/g,'Apolitical Jay'],[/Mr Jess Perry/g,'Mr Jay Perrin'],[/Flying Cowboy 123/g,'Flying Cowboy 321'],[/Walk Thru Fire/g,'Walk Thru Flame'],[/Dash Ta Fame/g,'Dash Ta Glory'],[/FDD Dynasty/g,'FRD Dynasty'],[/Valiant Hero(?!n)/g,'Valiant Heron'],[/Good Reason SA/g,'Good Reason MX'],[/Rocket Wrangler/g,'Rocket Wrestler'],[/Find A Buyer/g,'Find A Bidder'],[/Heritage Place Futurity \(EE\.UU\.\)/g,'Heritage Plains Futurity (EE.UU.)'],[/Heritage Place Futurity/g,'Futurity Sierra Dorada'],[/Consignación Heritage Place/g,'Consignación Sierra Dorada MX'],[/Heritage Place México/g,'Subasta Sierra Dorada MX'],[/Heritage Place USA/g,'Heritage Plains USA'],[/en Heritage Place/g,'en la Subasta Sierra Dorada MX'],[/Heritage Place/g,'Subasta Sierra Dorada MX'],[/Super Selecta USA/g,'Heritage Place USA'],[/Super Selecta \(Estados Unidos\)/g,'Subasta Heritage Place (Estados Unidos)'],[/Super Selecta/g,'Heritage Place'],[/Dash For Coin Futurity/g,'Futurity Relámpago Dorado'],[/Raindrop Futurity/g,'Futurity Sierra Madre'],[/All Americas Futurity/g,'Gran Futurity de las Américas'],[/el All Americas/g,'la Gran Futurity de las Américas'],[/Clásico ACM/g,'Clásico Nacional'],[/Salón de la Fama de la ACM/g,'Salón de la Fama'],[/Keeneland Selecta/g,'Bluegrass Selecta'],[/Lazy E Ranch/g,'Lazy Elm Ranch'],[/Los Alamitos Million Futurity/g,'Heritage Million Futurity'],[/Los Alamitos Sale/g,'Pacific Alamos Sale'],[/Remington Park Sale/g,'Red Plains Park Sale'],[/Ruidoso Select/g,'Sierra Blanca Select'],[/Texas Classic Futurity/g,'Lone Star Classic Futurity'],[/West Texas Futurity/g,'Panhandle Futurity'],[/Oklahoma Futurity/g,'Sooner State Futurity'],[/Ruidoso Derby/g,'Sierra Blanca Derby'],[/Bank of America Challenge/g,'Frontier Bank Challenge'],[/Clásico Sunland/g,'Clásico Sol del Desierto'],[/Clásico Lone Star/g,'Clásico Estrella Solitaria'],[/Clásico Remington/g,'Clásico Parque Rojo'],[/Derby Los Alamitos/g,'Derby Álamos Dorados'],[/Allowance Los Alamitos/g,'Allowance Álamos Dorados'],[/Allowance Remington/g,'Allowance Parque Rojo'],[/Allowance Lone Star/g,'Allowance Estrella Solitaria'],[/Reclamación Sunland/g,'Reclamación Sol del Desierto'],[/José de Jesús Valdivia/g,'Jesús Valderrama'],[/Manuel Zavala(?!eta)/g,'Manuel Zavaleta']];
+const NAME_MAP=[[/All American(?!s)/g,'All Americas'],[/Dash For Cash/g,'Dash For Coin'],[/Rainbow Futurity/g,'Futurity Sierra Madre'],[/AQHA/g,'ACM'],[/First Down Dash/g,'First Round Dash'],[/Kiss My Hocks/g,'Kiss My Heels'],[/Go Man Go/g,'Go Mano Go'],[/Easy Jet/g,'Easy Jolt'],[/Corona Cartel/g,'Corona Carmesí'],[/Beduino/g,'Bedoyo'],[/Zevi(?!\w)/g,'Zevo'],[/Power Jam/g,'Power Jem'],[/Three Bars/g,'Three Beams'],[/Top Deck/g,'Top Dock'],[/Favorite Trick/g,'Favorite Treat'],[/Hennessy/g,'Henley'],[/Favorite Cartel/g,'Favorite Cadet'],[/Apollitical Jess/g,'Apolitical Jay'],[/Mr Jess Perry/g,'Mr Jay Perrin'],[/Flying Cowboy 123/g,'Flying Cowboy 321'],[/Walk Thru Fire/g,'Walk Thru Flame'],[/Dash Ta Fame/g,'Dash Ta Glory'],[/FDD Dynasty/g,'FRD Dynasty'],[/Valiant Hero(?!n)/g,'Valiant Heron'],[/Good Reason SA/g,'Good Reason MX'],[/Rocket Wrangler/g,'Rocket Wrestler'],[/Find A Buyer/g,'Find A Bidder'],[/Heritage Place Futurity \(EE\.UU\.\)/g,'Heritage Plains Futurity (EE.UU.)'],[/Heritage Place Futurity/g,'Futurity Sierra Dorada'],[/Consignación Heritage Place/g,'Consignación Sierra Dorada MX'],[/Heritage Place México/g,'Subasta Sierra Dorada MX'],[/Heritage Place USA/g,'Heritage Plains USA'],[/en Heritage Place/g,'en la Subasta Sierra Dorada MX'],[/Heritage Place/g,'Subasta Sierra Dorada MX'],[/Super Selecta USA/g,'Heritage Place USA'],[/Super Selecta \(Estados Unidos\)/g,'Subasta Heritage Place (Estados Unidos)'],[/Super Selecta/g,'Heritage Place'],[/Dash For Coin Futurity/g,'Futurity Relámpago Dorado'],[/Raindrop Futurity/g,'Futurity Sierra Madre'],[/All Americas Futurity/g,'Gran Futurity de las Américas'],[/el All Americas/g,'la Gran Futurity de las Américas'],[/Clásico ACM/g,'Clásico Nacional'],[/Salón de la Fama de la ACM/g,'Salón de la Fama'],[/Keeneland Selecta/g,'Bluegrass Selecta'],[/Lazy E Ranch/g,'Lazy Elm Ranch'],[/Los Alamitos Million Futurity/g,'Heritage Million Futurity'],[/Los Alamitos Sale/g,'Pacific Alamos Sale'],[/Remington Park Sale/g,'Red Plains Park Sale'],[/Ruidoso Select/g,'Sierra Blanca Select'],[/Texas Classic Futurity/g,'Lone Star Classic Futurity'],[/West Texas Futurity/g,'Panhandle Futurity'],[/Oklahoma Futurity/g,'Sooner State Futurity'],[/Ruidoso Derby/g,'Sierra Blanca Derby'],[/Bank of America Challenge/g,'Frontier Bank Challenge'],[/Clásico Sunland/g,'Clásico Sol del Desierto'],[/Clásico Lone Star/g,'Clásico Estrella Solitaria'],[/Clásico Remington/g,'Clásico Parque Rojo'],[/Derby Los Alamitos/g,'Derby Álamos Dorados'],[/Allowance Los Alamitos/g,'Allowance Álamos Dorados'],[/Allowance Remington/g,'Allowance Parque Rojo'],[/Allowance Lone Star/g,'Allowance Estrella Solitaria'],[/Reclamación Sunland/g,'Reclamación Sol del Desierto'],[/José de Jesús Valdivia/g,'Jesús Valderrama'],[/Manuel Zavala(?!eta)/g,'Manuel Zavaleta']];
 function load(){try{let s=localStorage.getItem(KEY);if(!s)return null;for(const [a,b] of NAME_MAP)s=s.replace(a,b);return JSON.parse(s);}catch(e){return null;}}
 function buildMap(){RHM={};for(const h of G.rivalHorses)RHM[h.id]=h;for(const h of (G.guests||[]))RHM[h.id]=h;}
 const RH=id=>RHM[id];
@@ -1266,7 +1266,30 @@ const fmtT=t=>t.toFixed(2)+' s';
    ============================================================ */
 const HERO={cuadra:['cuadra','Mi cuadra'],carreras:['carreras','Carreras'],crianza:['crianza','Crianza y genética'],mercado:['mercado','Mercado'],pista:['pista',''],parejeras:['parejeras','Parejeras']};
 function heroHTML(k){const x=HERO[k];if(!x)return'';return `<div class="hero${k==='pista'?' paper':''}"><img src="img/${x[0]}.webp" alt="" decoding="async" onerror="this.parentNode.style.display='none'">${x[1]?`<b>${x[1]}</b>`:''}</div>`;}
+/* ---- blindaje: si algo falla, el juego no se congela y muestra la causa ---- */
+function errReport(e,where){
+  try{window.__err={msg:String(e&&e.message||e),stack:String(e&&e.stack||'').split('\n').slice(0,6).join('\n'),where:where,tab:UI&&UI.tab,week:G&&G.week};
+    toast('⚠️ Algo falló ('+(where||'')+'): '+window.__err.msg.slice(0,60));}catch(x){}
+}
+function errPanel(e){
+  errReport(e,'pantalla '+UI.tab);const r=window.__err||{};
+  const rep='Quarter Horse V31 · '+(r.where||'')+' · semana '+r.week+'\n'+r.msg+'\n'+r.stack;
+  const m=$('#main');if(!m)return;
+  m.innerHTML=`<div class="card"><div class="h">⚠️ Esta pantalla tuvo un problema</div><div class="sub" style="margin:6px 0">Tu partida está a salvo. Puedes volver a la Cuadra o exportar un respaldo. Si se repite, copia el reporte y mándaselo a Claude.</div>
+  <textarea readonly style="width:100%;height:110px;font-size:10px;border-radius:8px;padding:6px;box-sizing:border-box">${esc(rep)}</textarea>
+  <button class="btn gold" data-act="tab" data-v="cuadra">Ir a la Cuadra</button><button class="btn ghost" data-act="expo">💾 Exportar partida</button></div>`;
+}
+window.addEventListener('error',ev=>{try{errReport(ev.error||ev.message,'global');}catch(x){}});
+window.addEventListener('unhandledrejection',ev=>{try{errReport(ev.reason,'promesa');}catch(x){}});
 function render(){
+  try{render0();}
+  catch(e){
+    /* autocuración: limpia selecciones que pudieran estar dañadas y reintenta una vez */
+    try{UI.sire=null;UI.mare=null;UI.lot='all';render0();toast('Se reinició la selección de la pantalla');}
+    catch(e2){errPanel(e2);}
+  }
+}
+function render0(){
   $('#hName').innerHTML=silk(G.colors.c1,G.colors.c2)+' '+esc(G.name)+' ✏️';
   const m=$('#hMoney');m.textContent=fmt(G.money);m.className=G.money<0?'neg':'';
   $('#hWeek').textContent='USD · Temp. '+(Math.floor((G.week-1)/SEASON_WEEKS)+1)+' · Sem '+(((G.week-1)%SEASON_WEEKS)+1)+'/'+SEASON_WEEKS;
@@ -3819,7 +3842,7 @@ setTimeout(()=>{try{if(typeof G!=='undefined'&&G&&G.svPending)toast('Tienes una 
 /* ============================================================
    EVENTOS
    ============================================================ */
-document.addEventListener('click',e=>{
+function clickMain(e){
   const t=e.target.closest('[data-act]');if(!t)return;
   const a=t.dataset.act,id=t.dataset.id,v=t.dataset.v;
   switch(a){
@@ -3973,7 +3996,8 @@ document.addEventListener('click',e=>{
         G.myShares=G.myShares||{};G.myShares[x.id]={us:curSeason(),un:0,name:x.name};addTx('Parte de sindicato USA',a,a.price,a.seller);G.money-=a.price;G.auction=G.auction.filter(q=>q!==a);
         save();render();toast(`Ahora eres socio de ${x.name} (${G.stables[si].name}). Búscalo en Mercado → Sementales.`);break;}addTx('Compra',a,a.price,a.seller);G.money-=a.price;a.br=a.br||(a.seller&&!/Consignación/.test(a.seller)?a.seller:'Criadero independiente');delete a.price;delete a.seller;delete a.lot;G.horses.push(a);G.auction=G.auction.filter(x=>x!==a);save();render();toast(`${a.name} ya es tuyo`);break;}
   }
-});
+}
+document.addEventListener('click',e=>{try{clickMain(e);}catch(er){errReport(er,'click');}});
 
 document.addEventListener('keydown',e=>{
   if(e.key!=='Enter'||!e.target||!e.target.id)return;
